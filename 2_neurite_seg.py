@@ -7,10 +7,10 @@ from multiprocessing import Process
 from tqdm import tqdm
 
 # ================= 配置区 =================
-basic_path = "/data/disk/C6.0/app_test/test"
+basic_path = "/data/disk/C6.0/app_test/"
 # basic_path = "/data/disk3/zll/origin"
 raw_input_dir = os.path.join(basic_path, 'img')
-final_output_dir = os.path.join(basic_path, '1um_neurite_seg')
+final_output_dir = os.path.join(basic_path, '1um_neurite_seg_0424')
 base_temp_dir = os.path.join(basic_path, 'temp_batch_input') 
 
 # [修改点 1]：定义可用的物理 GPU 列表
@@ -20,7 +20,7 @@ AVAILABLE_GPUS = [0]
 # 模型路径
 os.environ['nnUNet_raw'] = "Wait_No_Need"
 os.environ['nnUNet_preprocessed'] = "Wait_No_Need"
-os.environ['nnUNet_results'] = "/data/disk/nnUNet_local/nnUNet_results"
+os.environ['nnUNet_results'] = "/data/disk3/nnUNet_base/nnUNet_results"
 
 # 并发数
 # 注意：10个并发意味着每张显卡会同时跑 5 个模型 (10/2=5)。
@@ -49,7 +49,7 @@ def run_nnunet(input_folder, output_folder, worker_id, gpu_id):
         "nnUNetv2_predict",
         "-i", input_folder,
         "-o", output_folder,
-        "-d", "169",
+        "-d", "170",
         "-c", "3d_fullres",
         "-f", "0",
         # "--save_probabilities",

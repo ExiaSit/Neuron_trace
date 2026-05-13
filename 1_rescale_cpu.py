@@ -13,7 +13,7 @@ from neuroutils.meta.neuron import get_source_v3d_img_file, get_xy_z_resolution
 from neuroutils.image.io import load_image
 
 # 路径配置
-test_dir = "/data/disk3/zll/origin/img"
+test_dir = "/data/disk3/CUT/Dataset/img"
 os.makedirs(test_dir, exist_ok=True)
 GENERATE_JSON = False
 
@@ -76,7 +76,7 @@ def try_repare_nnunet_file(neuron_id):
         print(f"Error wrapper {neuron_id}: {e}")
 
 if __name__ == "__main__":
-    todo_neuron_ids = [i for i in range(46056,46133)]  
+    todo_neuron_ids = [i for i in range(20000,20001)]  
     cpu_n_jobs = 20 
     
     print(f"Starting processing with {cpu_n_jobs} parallel jobs on CPU...")
