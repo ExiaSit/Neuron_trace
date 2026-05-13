@@ -36,6 +36,9 @@ PATHS = {
     "trace_swc_dir": BASE_DIR / "trace_app2" / "down_sampled_swcs_app2",
     "trace_marker_dir": BASE_DIR / "trace_app2" / "markers",
     "trace_vis_dir": BASE_DIR / "trace_app2" / "vis_mip",
+
+    # Per-stage report-quality MIP snapshots written by run_pipeline.py.
+    "stage_mip_dir": BASE_DIR / "pipeline_mips",
     "trace_timeout_log": BASE_DIR / "trace_app2" / "record_timeout_5min.txt",
     "trace_error_log": BASE_DIR / "trace_app2" / "record_failed_5min.txt",
     "trace_cost_log": BASE_DIR / "trace_app2" / "record_cost_time_5min.txt",
@@ -43,6 +46,7 @@ PATHS = {
     # 5.gcut_pipeline.py output.
     "gcut_output_dir": BASE_DIR / "gcut_output",
     "gcut_error_log": BASE_DIR / "gcut_output" / "error_log.txt",
+    "gcut_selected_swc_dir": BASE_DIR / "gcut_output" / "selected_for_pruning",
 
     # 6_gcut_pruning_copy60228.py output.
     "prune_output_dir": BASE_DIR / "gcut_pruned4",
@@ -86,6 +90,12 @@ PRUNING = {
     "downsample_scale": (1, 1, 1),
     "pre_traced": True,
     "verbose": True,
+}
+
+VISUALIZATION = {
+    # Save a report-quality MIP panel after each main stage that produces an image.
+    "save_stage_mips": True,
+    "dpi": 200,
 }
 
 # Toggle whole stages without changing code. Stages still run sequentially.

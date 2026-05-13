@@ -13,10 +13,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import tifffile
 
-from pipeline_config import ENABLED_STAGES, GCUT, NEURON_IDS, NNUNET, PATHS, PRUNING, SOMA
+from pipeline_config import ENABLED_STAGES, GCUT, NEURON_IDS, NNUNET, PATHS, PRUNING, SOMA, VISUALIZATION
 
 ROOT = Path(__file__).resolve().parent
 
@@ -46,6 +50,78 @@ def set_nnunet_env(results_dir: str | Path) -> None:
 
 def image_stem(neuron_id: int | str) -> str:
     return f"image_{neuron_id}"
+
+
+def save_volume_mip(volume_path: Path, stage_name: str, neuron_id: int | str) -> None:
+    """Save a report-quality XYZ MIP summary for a stage output volume."""
+    if not VISUALIZATION.get("save_stage_mips", True):
+        return
+    if not volume_path.exists():
+        print(f"[mip skip] missing volume for {stage_name}: {volume_path}")
+        return
+
+    mip_dir = Path(PATHS["stage_mip_dir"]) / str(neuron_id)
+    mip_dir.mkdir(parents=True, exist_ok=True)
+    img = tifffile.imread(volume_path)
+    if img.ndim == 2:
+        projections = [("XY", img)]
+    elif img.ndim == 3:
+        projections = [
+            ("XY", np.max(img, axis=0)),
+            ("XZ", np.max(img, axis=1)),
+            ("YZ", np.max(img, axis=2)),
+        ]
+    else:
+        print(f"[mip skip] unsupported ndim={img.ndim}: {volume_path}")
+        return
+
+    fig, axes = plt.subplots(1, len(projections), figsize=(6 * len(projections), 6), dpi=VISUALIZATION.get("dpi", 200))
+    if len(projections) == 1:
+        axes = [axes]
+    for ax, (title, mip) in zip(axes, projections):
+        vmax = np.percentile(mip, 99.5) if np.max(mip) > 0 else 1
+        if vmax <= 0:
+            vmax = np.max(mip) if np.max(mip) > 0 else 1
+        ax.imshow(mip, cmap="gray", vmin=0, vmax=vmax)
+        ax.set_title(f"{stage_name} {title}")
+        ax.axis("off")
+    fig.suptitle(f"Neuron {neuron_id} - {stage_name}")
+    fig.tight_layout()
+    fig.savefig(mip_dir / f"{stage_name}.png")
+    plt.close(fig)
+
+
+def find_gcut_target_swc(neuron_id: int | str) -> Path:
+    """Return the G-Cut SWC that should be passed to pruning."""
+    stem = image_stem(neuron_id)
+    gcut_dir = Path(PATHS["gcut_output_dir"])
+    candidates = sorted(gcut_dir.glob(f"{stem}_0000_gcut_soma_*_TARGET.swc"))
+    if not candidates:
+        candidates = sorted(gcut_dir.glob(f"{stem}_gcut_soma_*_TARGET.swc"))
+    if not candidates:
+        candidates = sorted(gcut_dir.glob(f"{stem}_0000_gcut_soma_*.swc"))
+    if not candidates:
+        candidates = sorted(gcut_dir.glob(f"{stem}_gcut_soma_*.swc"))
+    if not candidates:
+        raise FileNotFoundError(f"No G-Cut SWC found for {stem} in {gcut_dir}")
+    return candidates[0]
+
+
+def prepare_gcut_swc_for_pruning(neuron_id: int | str) -> Path:
+    """Copy the selected G-Cut SWC to a pruning-compatible name.
+
+    6_gcut_pruning_copy60228.py searches for image_<id>.swc or
+    image_<id>_0000.swc. G-Cut writes names like
+    image_<id>_0000_gcut_soma_1_TARGET.swc, so the orchestrator creates a
+    compatibility copy without changing G-Cut output naming.
+    """
+    source_swc = find_gcut_target_swc(neuron_id)
+    selected_dir = Path(PATHS["gcut_selected_swc_dir"])
+    selected_dir.mkdir(parents=True, exist_ok=True)
+    compat_swc = selected_dir / f"{image_stem(neuron_id)}.swc"
+    shutil.copy2(source_swc, compat_swc)
+    print(f"[gcut] selected for pruning: {source_swc} -> {compat_swc}")
+    return compat_swc
 
 
 def run_nnunet_single(
@@ -98,6 +174,7 @@ def run_rescale(neuron_id: int | str) -> None:
     mod.test_dir = str(PATHS["image_1um_dir"])
     Path(mod.test_dir).mkdir(parents=True, exist_ok=True)
     mod.prepare_nnunet_file(neuron_id)
+    save_volume_mip(Path(PATHS["image_1um_dir"]) / f"{image_stem(neuron_id)}_0000.tif", "01_rescale_1um", neuron_id)
 
 
 def run_soma_crop(neuron_id: int | str) -> None:
@@ -111,6 +188,7 @@ def run_soma_crop(neuron_id: int | str) -> None:
     Path(mod.soma_crop_dir).mkdir(parents=True, exist_ok=True)
     Path(mod.soma_seg_dir).mkdir(parents=True, exist_ok=True)
     mod.prepare_nnunet_file(neuron_id, SOMA["target_block_size"], save_vis=mod.SAVE_MIP_VISUALIZATION)
+    save_volume_mip(Path(PATHS["soma_crop_dir"]) / f"{image_stem(neuron_id)}_0000.tif", "02_soma_crop", neuron_id)
 
 
 def run_soma_infer(neuron_id: int | str) -> None:
@@ -123,6 +201,7 @@ def run_soma_infer(neuron_id: int | str) -> None:
         results_dir=NNUNET["soma_results"],
         output_stem=stem,
     )
+    save_volume_mip(Path(PATHS["soma_seg_dir"]) / f"{stem}.tif", "03_soma_seg", neuron_id)
 
 
 def run_neurite_infer(neuron_id: int | str) -> None:
@@ -135,6 +214,7 @@ def run_neurite_infer(neuron_id: int | str) -> None:
         results_dir=NNUNET["neurite_results"],
         output_stem=stem,
     )
+    save_volume_mip(Path(PATHS["neurite_seg_dir"]) / f"{stem}.tif", "04_neurite_seg", neuron_id)
 
 
 def run_merge(neuron_id: int | str) -> None:
@@ -157,6 +237,7 @@ def run_merge(neuron_id: int | str) -> None:
         mod.name_parser,
         save_preview=False,
     )
+    save_volume_mip(Path(PATHS["merged_mask_dir"]) / f"{stem}.tif", "05_merged_mask", neuron_id)
 
 
 def run_app2_trace(neuron_id: int | str) -> None:
@@ -184,6 +265,12 @@ def run_app2_trace(neuron_id: int | str) -> None:
     if status not in {"SUCCESS", "SKIP"}:
         raise RuntimeError(f"APP2 failed for {fname}: {status} {msg}")
 
+    app2_mip = Path(PATHS["trace_vis_dir"]) / f"{neuron_id}_mip.png"
+    if app2_mip.exists() and VISUALIZATION.get("save_stage_mips", True):
+        neuron_mip_dir = Path(PATHS["stage_mip_dir"]) / str(neuron_id)
+        neuron_mip_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(app2_mip, neuron_mip_dir / "06_app2_trace.png")
+
 
 def run_gcut(neuron_id: int | str, meta_df: pd.DataFrame) -> None:
     mod = load_stage_module("stage_gcut", "5.gcut_pipeline.py")
@@ -204,9 +291,11 @@ def run_gcut(neuron_id: int | str, meta_df: pd.DataFrame) -> None:
     name, _result, log_msg = mod.worker_task(args)
     if log_msg and any(token in log_msg for token in ("失败", "崩溃", "Traceback", "Error", "不存在")):
         raise RuntimeError(f"G-Cut reported an issue for {name}: {log_msg}")
+    prepare_gcut_swc_for_pruning(neuron_id)
 
 
 def run_prune(neuron_id: int | str, meta_df: pd.DataFrame) -> None:
+    prepare_gcut_swc_for_pruning(neuron_id)
     mod = load_stage_module("stage_prune", "6_gcut_pruning_copy60228.py")
     Path(PATHS["prune_mip_dir"]).mkdir(parents=True, exist_ok=True)
     Path(PATHS["prune_swc_dir"]).mkdir(parents=True, exist_ok=True)
@@ -216,7 +305,7 @@ def run_prune(neuron_id: int | str, meta_df: pd.DataFrame) -> None:
         "meta_file": str(PATHS["meta_file"]),
         "meta": meta_df,
         "concat_dir": str(PATHS["merged_mask_dir"]),
-        "traced_dir": str(PATHS["gcut_output_dir"]),
+        "traced_dir": str(PATHS["gcut_selected_swc_dir"]),
         "raw_image_dir": str(PATHS["image_1um_dir"]),
         "mip_dir": str(PATHS["prune_mip_dir"]),
         "out_swc_dir": str(PATHS["prune_swc_dir"]),
