@@ -7,10 +7,10 @@ orchestrator in ``run_pipeline.py`` reads all input/output locations from here.
 from pathlib import Path
 
 # Neurons are processed one-by-one in this order. Use integers or strings.
-NEURON_IDS = [20000]
+NEURON_IDS = [62361]
 
 # Base dataset directory. The paths below may be absolute or relative to this.
-BASE_DIR = Path("/data/disk/C6.0/app_test")
+BASE_DIR = Path("/data/disk3/C6.0/app_test")
 
 PATHS = {
     # 1_rescale_cpu.py output and downstream 1um image input.
@@ -61,7 +61,7 @@ PATHS = {
 
 NNUNET = {
     "soma_dataset_id": "206",
-    "neurite_dataset_id": "170",
+    "neurite_dataset_id": "169",
     "configuration": "3d_fullres",
     "fold": "0",
     "device": "cuda",
@@ -69,7 +69,7 @@ NNUNET = {
     "raw": "Wait_No_Need",
     "preprocessed": "Wait_No_Need",
     "soma_results": "/data/disk/nnUNet_local/nnUNet_results",
-    "neurite_results": "/data/disk3/nnUNet_base/nnUNet_results",
+    "neurite_results": "/data/disk/nnUNet_local/nnUNet_results",
 }
 
 SOMA = {
