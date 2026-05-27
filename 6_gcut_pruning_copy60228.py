@@ -644,19 +644,6 @@ def process_neuron_morphology(input_imgfile, swc_neu, raw_imgfile, out_swc_dir, 
         plt.tight_layout()
         plt.savefig(os.path.join(mip_dir, f'{prefix}_combined_process.png'))
 
-        individual_dir = os.path.join(mip_dir, f'{prefix}_process_panels')
-        os.makedirs(individual_dir, exist_ok=True)
-        fig.canvas.draw()
-        renderer = fig.canvas.get_renderer()
-        for i, (key, title) in enumerate(step_order):
-            safe_title = ''.join(c if c.isalnum() else '_' for c in key).strip('_')
-            bbox = axes[i].get_tightbbox(renderer).transformed(fig.dpi_scale_trans.inverted())
-            fig.savefig(
-                os.path.join(individual_dir, f'{i + 1:02d}_{safe_title}.png'),
-                dpi=300,
-                bbox_inches=bbox.expanded(1.08, 1.15),
-            )
-
         plt.close('all')
     # 1. 加载数据
     raw_image = ImageParser(raw_imgfile).load()

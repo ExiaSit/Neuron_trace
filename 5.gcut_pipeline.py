@@ -440,6 +440,8 @@ def process_image_to_gcut(img_path, mask_path, swc_path, vis_output_dir,
         if Path(swc_path).exists():
             try:
                 tree_orig = parse_swc(swc_path)
+                if len(tree_orig) == 0:
+                    return None, f"跳过: App2 SWC 为空或没有有效节点: {swc_path}"
                 tree_orig, removed_count = remove_fake_roots(tree_orig)
                 if removed_count > 0:
                     log_messages.append(f"清理了{img_path} 中{removed_count} 个无子节点的假根节点。")

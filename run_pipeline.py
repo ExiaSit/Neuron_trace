@@ -9,27 +9,21 @@ import argparse
 import concurrent.futures
 import importlib.util
 import os
-import queue
+import time
 import shutil
 import subprocess
 import sys
-import threading
 from pathlib import Path
-from typing import Any, Callable, Iterable, Sequence,Union
+from typing import Any, Callable, Iterable, Sequence, Union
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import tifffile
 
-from pipeline_config import ENABLED_STAGES, GCUT, NEURON_IDS, NNUNET, PATHS, PIPELINE, PRUNING, SOMA, VISUALIZATION
+from pipeline_config import ENABLED_STAGES, GCUT, NEURON_IDS, NNUNET, PATHS, PIPELINE, PRUNING, SOMA
 
 ROOT = Path(__file__).resolve().parent
 StageFunc = Callable[[Union[int, str]], None]
 StageEntry = tuple[str, StageFunc]
-MIP_LOCK = threading.Lock()
 
 
 def load_stage_module(module_name: str, filename: str) -> Any:
@@ -57,46 +51,6 @@ def set_nnunet_env(results_dir: str | Path) -> None:
 
 def image_stem(neuron_id: int | str) -> str:
     return f"image_{neuron_id}"
-
-
-def save_volume_mip(volume_path: Path, stage_name: str, neuron_id: int | str) -> None:
-    """Save a report-quality XYZ MIP summary for a stage output volume."""
-    if not VISUALIZATION.get("save_stage_mips", True):
-        return
-    if not volume_path.exists():
-        print(f"[mip skip] missing volume for {stage_name}: {volume_path}")
-        return
-
-    mip_dir = Path(PATHS["stage_mip_dir"]) / str(neuron_id)
-    mip_dir.mkdir(parents=True, exist_ok=True)
-    img = tifffile.imread(volume_path)
-    if img.ndim == 2:
-        projections = [("XY", img)]
-    elif img.ndim == 3:
-        projections = [
-            ("XY", np.max(img, axis=0)),
-            ("XZ", np.max(img, axis=1)),
-            ("YZ", np.max(img, axis=2)),
-        ]
-    else:
-        print(f"[mip skip] unsupported ndim={img.ndim}: {volume_path}")
-        return
-
-    with MIP_LOCK:
-        fig, axes = plt.subplots(1, len(projections), figsize=(6 * len(projections), 6), dpi=VISUALIZATION.get("dpi", 200))
-        if len(projections) == 1:
-            axes = [axes]
-        for ax, (title, mip) in zip(axes, projections):
-            vmax = np.percentile(mip, 99.5) if np.max(mip) > 0 else 1
-            if vmax <= 0:
-                vmax = np.max(mip) if np.max(mip) > 0 else 1
-            ax.imshow(mip, cmap="gray", vmin=0, vmax=vmax)
-            ax.set_title(f"{stage_name} {title}")
-            ax.axis("off")
-        fig.suptitle(f"Neuron {neuron_id} - {stage_name}")
-        fig.tight_layout()
-        fig.savefig(mip_dir / f"{stage_name}.png")
-        plt.close(fig)
 
 
 def find_gcut_target_swc(neuron_id: int | str) -> Path:
@@ -180,12 +134,218 @@ def run_nnunet_single(
         shutil.rmtree(job_temp_dir, ignore_errors=True)
 
 
+def batched(items: Sequence[int | str], batch_size: int) -> Iterable[list[int | str]]:
+    for start in range(0, len(items), batch_size):
+        yield list(items[start:start + batch_size])
+
+
+def is_file_stable(path: Path, stable_seconds: float = 2.0, interval_seconds: float = 0.5) -> bool:
+    if not path.exists():
+        return False
+    first = path.stat()
+    if first.st_size <= 0:
+        return False
+    time.sleep(interval_seconds)
+    if not path.exists():
+        return False
+    second = path.stat()
+    return (
+        first.st_size == second.st_size
+        and first.st_mtime_ns == second.st_mtime_ns
+        and time.time() - second.st_mtime >= stable_seconds
+    )
+
+
+def prepare_nnunet_batch_input(
+    *,
+    source_tifs: dict[int | str, Path],
+    output_dir: Path,
+    temp_dir: Path,
+    temp_name: str,
+) -> tuple[Path, list[int | str]]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    job_temp_dir = temp_dir / temp_name
+    if job_temp_dir.exists():
+        shutil.rmtree(job_temp_dir)
+    job_temp_dir.mkdir(parents=True, exist_ok=True)
+
+    pending: list[int | str] = []
+    for neuron_id, source_tif in source_tifs.items():
+        stem = image_stem(neuron_id)
+        output_path = output_dir / f"{stem}.tif"
+        if output_path.exists():
+            print(f"[skip] nnUNet output exists: {output_path}")
+            continue
+        if not source_tif.exists():
+            raise FileNotFoundError(f"nnUNet input missing: {source_tif}")
+        temp_input = job_temp_dir / f"{stem}_0000.tif"
+        try:
+            os.symlink(source_tif, temp_input)
+        except OSError:
+            shutil.copy2(source_tif, temp_input)
+        pending.append(neuron_id)
+
+    return job_temp_dir, pending
+
+
+def build_nnunet_cmd(input_dir: Path, output_dir: Path, dataset_id: str) -> list[str]:
+    return [
+        "nnUNetv2_predict",
+        "-i", str(input_dir),
+        "-o", str(output_dir),
+        "-d", str(dataset_id),
+        "-c", str(NNUNET["configuration"]),
+        "-f", str(NNUNET["fold"]),
+        "-device", str(NNUNET["device"]),
+    ]
+
+
+def run_nnunet_batch(
+    *,
+    source_tifs: dict[int | str, Path],
+    output_dir: Path,
+    temp_dir: Path,
+    dataset_id: str,
+    results_dir: str | Path,
+    temp_name: str,
+) -> list[int | str]:
+    job_temp_dir, pending = prepare_nnunet_batch_input(
+        source_tifs=source_tifs,
+        output_dir=output_dir,
+        temp_dir=temp_dir,
+        temp_name=temp_name,
+    )
+    if not pending:
+        shutil.rmtree(job_temp_dir, ignore_errors=True)
+        return []
+
+    set_nnunet_env(results_dir)
+    env = os.environ.copy()
+    env["CUDA_VISIBLE_DEVICES"] = str(NNUNET["gpu_id"])
+    cmd = build_nnunet_cmd(job_temp_dir, output_dir, str(dataset_id))
+    print("[run] " + " ".join(cmd))
+    try:
+        subprocess.run(cmd, check=True, env=env)
+    finally:
+        shutil.rmtree(job_temp_dir, ignore_errors=True)
+    return pending
+
+
+def run_nnunet_batch_with_output_watch(
+    *,
+    source_tifs: dict[int | str, Path],
+    output_dir: Path,
+    temp_dir: Path,
+    dataset_id: str,
+    results_dir: str | Path,
+    temp_name: str,
+    on_output_ready: Callable[[int | str], None],
+    poll_seconds: float = 2.0,
+) -> list[int | str]:
+    job_temp_dir, pending = prepare_nnunet_batch_input(
+        source_tifs=source_tifs,
+        output_dir=output_dir,
+        temp_dir=temp_dir,
+        temp_name=temp_name,
+    )
+
+    completed: list[int | str] = []
+    for neuron_id in source_tifs:
+        output_path = output_dir / f"{image_stem(neuron_id)}.tif"
+        if neuron_id not in pending and is_file_stable(output_path):
+            on_output_ready(neuron_id)
+            completed.append(neuron_id)
+
+    if not pending:
+        shutil.rmtree(job_temp_dir, ignore_errors=True)
+        return completed
+
+    set_nnunet_env(results_dir)
+    env = os.environ.copy()
+    env["CUDA_VISIBLE_DEVICES"] = str(NNUNET["gpu_id"])
+    cmd = build_nnunet_cmd(job_temp_dir, output_dir, str(dataset_id))
+    print("[run] " + " ".join(cmd))
+    process = subprocess.Popen(cmd, env=env)
+    remaining = set(pending)
+
+    try:
+        while remaining:
+            ready_now = []
+            for neuron_id in list(remaining):
+                output_path = output_dir / f"{image_stem(neuron_id)}.tif"
+                if is_file_stable(output_path):
+                    ready_now.append(neuron_id)
+            for neuron_id in ready_now:
+                remaining.remove(neuron_id)
+                completed.append(neuron_id)
+                on_output_ready(neuron_id)
+
+            return_code = process.poll()
+            if return_code is not None:
+                if return_code != 0:
+                    raise subprocess.CalledProcessError(return_code, cmd)
+                break
+            time.sleep(poll_seconds)
+
+        return_code = process.wait()
+        if return_code != 0:
+            raise subprocess.CalledProcessError(return_code, cmd)
+
+        for neuron_id in list(remaining):
+            output_path = output_dir / f"{image_stem(neuron_id)}.tif"
+            if not is_file_stable(output_path, stable_seconds=0.0):
+                raise FileNotFoundError(f"nnUNet output missing or still changing: {output_path}")
+            remaining.remove(neuron_id)
+            completed.append(neuron_id)
+            on_output_ready(neuron_id)
+    finally:
+        if process.poll() is None:
+            process.terminate()
+        shutil.rmtree(job_temp_dir, ignore_errors=True)
+
+    return completed
+
+
+def run_soma_infer_batch(neuron_ids: Sequence[int | str], batch_size: int) -> None:
+    for batch_index, batch in enumerate(batched(neuron_ids, batch_size)):
+        source_tifs = {neuron_id: Path(PATHS["soma_crop_dir"]) / f"{image_stem(neuron_id)}_0000.tif" for neuron_id in batch}
+        run_nnunet_batch(
+            source_tifs=source_tifs,
+            output_dir=Path(PATHS["soma_seg_dir"]),
+            temp_dir=Path(PATHS["soma_temp_dir"]),
+            dataset_id=str(NNUNET["soma_dataset_id"]),
+            results_dir=NNUNET["soma_results"],
+            temp_name=f"soma_batch_{batch_index}_{image_stem(batch[0])}_{image_stem(batch[-1])}",
+        )
+
+
+def run_neurite_infer_batch_with_watch(
+    neuron_ids: Sequence[int | str],
+    batch_size: int,
+    on_output_ready: Callable[[int | str], None],
+) -> None:
+    for batch_index, batch in enumerate(batched(neuron_ids, batch_size)):
+        source_tifs = {neuron_id: Path(PATHS["image_1um_dir"]) / f"{image_stem(neuron_id)}_0000.tif" for neuron_id in batch}
+
+        def handle_ready(neuron_id: int | str) -> None:
+            on_output_ready(neuron_id)
+
+        run_nnunet_batch_with_output_watch(
+            source_tifs=source_tifs,
+            output_dir=Path(PATHS["neurite_seg_dir"]),
+            temp_dir=Path(PATHS["neurite_temp_dir"]),
+            dataset_id=str(NNUNET["neurite_dataset_id"]),
+            results_dir=NNUNET["neurite_results"],
+            temp_name=f"neurite_batch_{batch_index}_{image_stem(batch[0])}_{image_stem(batch[-1])}",
+            on_output_ready=handle_ready,
+        )
+
+
 def run_rescale(neuron_id: int | str) -> None:
     mod = load_stage_module("stage_rescale", "1_rescale_cpu.py")
     mod.test_dir = str(PATHS["image_1um_dir"])
     Path(mod.test_dir).mkdir(parents=True, exist_ok=True)
     mod.prepare_nnunet_file(neuron_id)
-    save_volume_mip(Path(PATHS["image_1um_dir"]) / f"{image_stem(neuron_id)}_0000.tif", "01_rescale_1um", neuron_id)
 
 
 def run_soma_crop(neuron_id: int | str) -> None:
@@ -199,7 +359,6 @@ def run_soma_crop(neuron_id: int | str) -> None:
     Path(mod.soma_crop_dir).mkdir(parents=True, exist_ok=True)
     Path(mod.soma_seg_dir).mkdir(parents=True, exist_ok=True)
     mod.prepare_nnunet_file(neuron_id, SOMA["target_block_size"], save_vis=mod.SAVE_MIP_VISUALIZATION)
-    save_volume_mip(Path(PATHS["soma_crop_dir"]) / f"{image_stem(neuron_id)}_0000.tif", "02_soma_crop", neuron_id)
 
 
 def run_soma_infer(neuron_id: int | str) -> None:
@@ -212,7 +371,6 @@ def run_soma_infer(neuron_id: int | str) -> None:
         results_dir=NNUNET["soma_results"],
         output_stem=stem,
     )
-    save_volume_mip(Path(PATHS["soma_seg_dir"]) / f"{stem}.tif", "03_soma_seg", neuron_id)
 
 
 def run_neurite_infer(neuron_id: int | str) -> None:
@@ -225,7 +383,6 @@ def run_neurite_infer(neuron_id: int | str) -> None:
         results_dir=NNUNET["neurite_results"],
         output_stem=stem,
     )
-    save_volume_mip(Path(PATHS["neurite_seg_dir"]) / f"{stem}.tif", "04_neurite_seg", neuron_id)
 
 
 def run_merge(neuron_id: int | str) -> None:
@@ -248,20 +405,19 @@ def run_merge(neuron_id: int | str) -> None:
         mod.name_parser,
         save_preview=False,
     )
-    save_volume_mip(Path(PATHS["merged_mask_dir"]) / f"{stem}.tif", "05_merged_mask", neuron_id)
 
 
 def run_app2_trace(neuron_id: int | str) -> None:
     mod = load_stage_module("stage_app2", "4_pre_trace_app2.py")
     mod.V3D_PATH = str(PATHS["vaa3d_path"])
-    for path_key in ("trace_output_dir", "trace_swc_dir", "trace_marker_dir", "trace_vis_dir"):
+    for path_key in ("trace_output_dir", "trace_swc_dir", "trace_marker_dir"):
         Path(PATHS[path_key]).mkdir(parents=True, exist_ok=True)
     stem = image_stem(neuron_id)
     result = mod.process_single_file(
         str(Path(PATHS["merged_mask_dir"]) / f"{stem}.tif"),
         str(Path(PATHS["trace_swc_dir"]) / f"{stem}.swc"),
         str(PATHS["trace_marker_dir"]),
-        str(PATHS["trace_vis_dir"]),
+        None,
         str(PATHS["image_1um_dir"]),
     )
     fname, status, msg, cost_min = result
@@ -276,21 +432,23 @@ def run_app2_trace(neuron_id: int | str) -> None:
     if status not in {"SUCCESS", "SKIP"}:
         raise RuntimeError(f"APP2 failed for {fname}: {status} {msg}")
 
-    app2_mip = Path(PATHS["trace_vis_dir"]) / f"{neuron_id}_mip.png"
-    if app2_mip.exists() and VISUALIZATION.get("save_stage_mips", True):
-        neuron_mip_dir = Path(PATHS["stage_mip_dir"]) / str(neuron_id)
-        neuron_mip_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(app2_mip, neuron_mip_dir / "06_app2_trace.png")
 
 
-def run_gcut(neuron_id: int | str, meta_df: pd.DataFrame) -> None:
+def run_gcut(neuron_id: int | str, meta_df: pd.DataFrame) -> bool:
     mod = load_stage_module("stage_gcut", "5.gcut_pipeline.py")
     Path(PATHS["gcut_output_dir"]).mkdir(parents=True, exist_ok=True)
     stem = image_stem(neuron_id)
+    swc_path = Path(PATHS["trace_swc_dir"]) / f"{stem}.swc"
+    if not swc_has_nodes(swc_path):
+        reason = f"APP2 SWC is empty or has no valid nodes: {swc_path}"
+        print(f"[skip] {stem}: {reason}")
+        log_pipeline_skip(Path(PATHS["gcut_error_log"]), neuron_id, reason)
+        return False
+
     args = (
         Path(PATHS["image_1um_dir"]) / f"{stem}_0000.tif",
         Path(PATHS["merged_mask_dir"]) / f"{stem}.tif",
-        Path(PATHS["trace_swc_dir"]) / f"{stem}.swc",
+        swc_path,
         Path(PATHS["gcut_output_dir"]),
         GCUT["target_percentile"],
         GCUT["gsdt_threshold_x"],
@@ -302,7 +460,14 @@ def run_gcut(neuron_id: int | str, meta_df: pd.DataFrame) -> None:
     name, _result, log_msg = mod.worker_task(args)
     if log_msg and any(token in log_msg for token in ("失败", "崩溃", "Traceback", "Error", "不存在")):
         raise RuntimeError(f"G-Cut reported an issue for {name}: {log_msg}")
-    prepare_gcut_swc_for_pruning(neuron_id)
+    try:
+        prepare_gcut_swc_for_pruning(neuron_id)
+    except FileNotFoundError:
+        reason = f"G-Cut did not produce a target SWC for {stem}: {log_msg}"
+        print(f"[skip] {stem}: {reason}")
+        log_pipeline_skip(Path(PATHS["gcut_error_log"]), neuron_id, reason)
+        return False
+    return True
 
 
 def run_prune(neuron_id: int | str, meta_df: pd.DataFrame) -> None:
@@ -342,7 +507,19 @@ def parse_args() -> argparse.Namespace:
         "--stage-max-tasks",
         type=int,
         default=int(PIPELINE.get("stage_max_tasks", 1)),
-        help="Maximum neurons processed concurrently inside each stage in stage-batch mode.",
+        help="Maximum CPU/downstream tasks to run concurrently in stage-batch mode.",
+    )
+    parser.add_argument(
+        "--gpu-max-tasks",
+        type=int,
+        default=int(PIPELINE.get("gpu_max_tasks", 1)),
+        help="Maximum nnUNet GPU batch processes to run concurrently in stage-batch mode.",
+    )
+    parser.add_argument(
+        "--infer-batch-size",
+        type=int,
+        default=int(PIPELINE.get("infer_batch_size", PIPELINE.get("stage_max_tasks", 1))),
+        help="Number of neurons placed into one nnUNet batch input directory.",
     )
     return parser.parse_args()
 
@@ -373,14 +550,11 @@ def build_stages(meta_df: pd.DataFrame | None) -> list[StageEntry]:
     return [(stage_name, stage_func) for stage_name, stage_func in stages if ENABLED_STAGES.get(stage_name, True)]
 
 
-def iter_batches(items: Sequence[int | str], batch_size: int) -> Iterable[list[int | str]]:
-    for start in range(0, len(items), batch_size):
-        yield list(items[start:start + batch_size])
-
-
-def run_stage_for_batch(stage_name: str, stage_func: StageFunc, neuron_ids: Sequence[int | str], max_tasks: int) -> None:
+def run_stage_for_neurons(stage_name: str, stage_func: StageFunc, neuron_ids: Sequence[int | str], max_tasks: int) -> None:
+    if not neuron_ids:
+        return
     workers = min(max_tasks, len(neuron_ids))
-    print(f"\n--- {stage_name}: batch {neuron_ids[0]}..{neuron_ids[-1]} ({len(neuron_ids)} neurons, {workers} workers) ---")
+    print(f"\n--- {stage_name}: {len(neuron_ids)} neurons, {workers} workers ---")
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
         future_to_neuron = {executor.submit(stage_func, neuron_id): neuron_id for neuron_id in neuron_ids}
         for future in concurrent.futures.as_completed(future_to_neuron):
@@ -398,120 +572,147 @@ def run_neuron_mode(stages: Sequence[StageEntry], neuron_ids: Sequence[int | str
         print(f"\n========== Processing neuron {neuron_id} ==========")
         for stage_name, stage_func in stages:
             print(f"\n--- {stage_name} ---")
-            stage_func(neuron_id)
+            result = stage_func(neuron_id)
+            if stage_name == "gcut" and result is False:
+                print(f"[skip] neuron {neuron_id}: G-Cut skipped, pruning will not run.")
+                break
     print("\nAll requested neurons have been processed sequentially.")
 
 
-BASE_STAGE_DEPENDENCIES = {
-    "soma_crop": ("rescale",),
-    "soma_infer": ("soma_crop",),
-    "neurite_infer": ("rescale",),
-    # concat_neurite_soma.py needs both neurite segmentation and soma crop/seg outputs.
-    "merge": ("soma_crop", "soma_infer", "neurite_infer"),
-    "app2_trace": ("merge",),
-    "gcut": ("rescale", "soma_crop", "soma_infer", "merge", "app2_trace"),
-    "prune": ("merge", "gcut"),
-}
+SOMA_PREFILL_STAGES = ("rescale", "soma_crop", "soma_infer")
+GPU_STAGES = {"soma_infer", "neurite_infer"}
+DOWNSTREAM_AFTER_NEURITE_STAGES = ("merge", "app2_trace", "gcut", "prune")
 
 
-def build_enabled_dependencies(stage_names: set[str]) -> dict[str, tuple[str, ...]]:
-    return {
-        stage_name: tuple(dep for dep in BASE_STAGE_DEPENDENCIES.get(stage_name, ()) if dep in stage_names)
-        for stage_name in stage_names
-    }
+def soma_outputs_ready(neuron_id: int | str) -> bool:
+    stem = image_stem(neuron_id)
+    return (
+        (Path(PATHS["soma_crop_dir"]) / f"{stem}.json").exists()
+        and (Path(PATHS["soma_seg_dir"]) / f"{stem}.tif").exists()
+    )
 
 
-def run_stage_batch_mode(stages: Sequence[StageEntry], neuron_ids: Sequence[int | str], stage_max_tasks: int) -> None:
+def neurite_output_ready(neuron_id: int | str) -> bool:
+    return (Path(PATHS["neurite_seg_dir"]) / f"{image_stem(neuron_id)}.tif").exists()
+
+
+def swc_has_nodes(swc_path: Path) -> bool:
+    if not swc_path.exists() or swc_path.stat().st_size == 0:
+        return False
+    with open(swc_path, "r", encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if len(line.split()) >= 7:
+                return True
+    return False
+
+
+def log_pipeline_skip(log_path: Path, neuron_id: int | str, reason: str) -> None:
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(f"[{image_stem(neuron_id)}] SKIP: {reason}\n")
+
+
+def run_downstream_after_neurite(stage_funcs: dict[str, StageFunc], neuron_id: int | str) -> None:
+    if "merge" in stage_funcs:
+        if not soma_outputs_ready(neuron_id):
+            raise FileNotFoundError(f"Soma crop json or soma mask is missing for neuron {neuron_id}; merge is not safe to run.")
+        if "neurite_infer" not in stage_funcs and not neurite_output_ready(neuron_id):
+            raise FileNotFoundError(f"Neurite segmentation is missing for neuron {neuron_id}; merge is not safe to run.")
+
+    for stage_name in DOWNSTREAM_AFTER_NEURITE_STAGES:
+        stage_func = stage_funcs.get(stage_name)
+        if stage_func is None:
+            continue
+        print(f"\n--- {stage_name}: neuron {neuron_id} ---")
+        result = stage_func(neuron_id)
+        if stage_name == "gcut" and result is False:
+            print(f"[skip] neuron {neuron_id}: G-Cut skipped, pruning will not run.")
+            break
+
+
+def run_neurite_and_downstream(
+    stage_funcs: dict[str, StageFunc],
+    neuron_ids: Sequence[int | str],
+    gpu_max_tasks: int,
+    downstream_max_tasks: int,
+    infer_batch_size: int,
+) -> None:
+    downstream_enabled = any(stage_name in stage_funcs for stage_name in DOWNSTREAM_AFTER_NEURITE_STAGES)
+    downstream_futures: list[concurrent.futures.Future[None]] = []
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=downstream_max_tasks) as downstream_executor:
+        def submit_downstream(neuron_id: int | str) -> None:
+            if downstream_enabled:
+                downstream_futures.append(downstream_executor.submit(run_downstream_after_neurite, stage_funcs, neuron_id))
+
+        if "neurite_infer" in stage_funcs:
+            print(
+                f"\n--- neurite_infer: {len(neuron_ids)} neurons, batch size {infer_batch_size}, "
+                f"{min(gpu_max_tasks, len(neuron_ids))} GPU batch workers ---"
+            )
+            batches = list(enumerate(batched(neuron_ids, infer_batch_size)))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=min(gpu_max_tasks, len(batches))) as gpu_executor:
+                future_to_batch = {
+                    gpu_executor.submit(run_neurite_infer_batch_with_watch, batch, infer_batch_size, submit_downstream): batch
+                    for _batch_index, batch in batches
+                }
+                for future in concurrent.futures.as_completed(future_to_batch):
+                    batch = future_to_batch[future]
+                    try:
+                        future.result()
+                    except Exception as exc:
+                        for pending in future_to_batch:
+                            pending.cancel()
+                        raise RuntimeError(f"Stage neurite_infer failed for batch {batch}") from exc
+        elif downstream_enabled:
+            for neuron_id in neuron_ids:
+                submit_downstream(neuron_id)
+
+        for future in concurrent.futures.as_completed(downstream_futures):
+            future.result()
+
+
+def run_stage_batch_mode(
+    stages: Sequence[StageEntry],
+    neuron_ids: Sequence[int | str],
+    stage_max_tasks: int,
+    gpu_max_tasks: int,
+    infer_batch_size: int,
+) -> None:
     if stage_max_tasks < 1:
         raise ValueError("--stage-max-tasks must be >= 1")
+    if gpu_max_tasks < 1:
+        raise ValueError("--gpu-max-tasks must be >= 1")
+    if infer_batch_size < 1:
+        raise ValueError("--infer-batch-size must be >= 1")
     if not stages:
         print("\nNo enabled stages to run.")
         return
-
-    batches = list(enumerate(iter_batches(neuron_ids, stage_max_tasks)))
-    if not batches:
+    if not neuron_ids:
         print("\nNo neurons requested.")
         return
 
     stage_funcs = dict(stages)
-    stage_names = set(stage_funcs)
-    dependencies = build_enabled_dependencies(stage_names)
-    downstreams: dict[str, list[str]] = {stage_name: [] for stage_name in stage_names}
-    for stage_name, deps in dependencies.items():
-        for dep in deps:
-            downstreams[dep].append(stage_name)
+    print("\nStage-batch resource plan:")
+    print(f"  CPU/downstream max tasks: {stage_max_tasks}")
+    print(f"  GPU batch processes: {gpu_max_tasks}")
+    print(f"  nnUNet batch size: {infer_batch_size}")
+    print("  order: soma prefill first, then neurite batch inference; each stable neurite output triggers downstream")
 
-    ready_queues: dict[str, queue.Queue[Any]] = {stage_name: queue.Queue() for stage_name in stage_names}
-    errors: queue.Queue[tuple[str, int | None, list[int | str] | None, BaseException]] = queue.Queue()
-    completed_dependencies: dict[tuple[str, int], int] = {}
-    completed_work = 0
-    total_work = len(batches) * len(stages)
-    state_lock = threading.Lock()
-    done_event = threading.Event()
-    stop_event = threading.Event()
-    sentinel = object()
+    for stage_name in ("rescale", "soma_crop"):
+        stage_func = stage_funcs.get(stage_name)
+        if stage_func is None:
+            continue
+        run_stage_for_neurons(stage_name, stage_func, neuron_ids, stage_max_tasks)
 
-    print("\nStage-batch dependencies:")
-    for stage_name, _stage_func in stages:
-        deps = dependencies[stage_name]
-        dep_text = ", ".join(deps) if deps else "input batch"
-        print(f"  {stage_name} <- {dep_text}")
+    if "soma_infer" in stage_funcs:
+        print(f"\n--- soma_infer: {len(neuron_ids)} neurons, batch size {infer_batch_size} ---")
+        run_soma_infer_batch(neuron_ids, infer_batch_size)
 
-    for batch_index, batch in batches:
-        for stage_name, deps in dependencies.items():
-            if not deps:
-                ready_queues[stage_name].put((batch_index, batch))
-
-    def mark_complete(stage_name: str, batch_index: int, batch: list[int | str]) -> None:
-        nonlocal completed_work
-        with state_lock:
-            completed_work += 1
-            for next_stage in downstreams[stage_name]:
-                key = (next_stage, batch_index)
-                completed_dependencies[key] = completed_dependencies.get(key, 0) + 1
-                if completed_dependencies[key] == len(dependencies[next_stage]):
-                    ready_queues[next_stage].put((batch_index, batch))
-            if completed_work == total_work:
-                done_event.set()
-
-    def stage_worker(stage_name: str, stage_func: StageFunc) -> None:
-        input_queue = ready_queues[stage_name]
-        while True:
-            item = input_queue.get()
-            try:
-                if item is sentinel:
-                    return
-                batch_index, batch = item
-                if stop_event.is_set():
-                    continue
-                run_stage_for_batch(stage_name, stage_func, batch, stage_max_tasks)
-                mark_complete(stage_name, batch_index, batch)
-            except BaseException as exc:
-                stop_event.set()
-                batch_index = item[0] if isinstance(item, tuple) else None
-                batch = item[1] if isinstance(item, tuple) else None
-                errors.put((stage_name, batch_index, batch, exc))
-                done_event.set()
-                return
-            finally:
-                input_queue.task_done()
-
-    threads = [
-        threading.Thread(target=stage_worker, args=(stage_name, stage_func), name=f"stage-{stage_name}")
-        for stage_name, stage_func in stages
-    ]
-    for thread in threads:
-        thread.start()
-
-    done_event.wait()
-    for input_queue in ready_queues.values():
-        input_queue.put(sentinel)
-    for thread in threads:
-        thread.join()
-
-    if not errors.empty():
-        stage_name, batch_index, batch, exc = errors.get()
-        raise RuntimeError(f"Stage-batch pipeline failed in stage {stage_name} for batch #{batch_index}: {batch}") from exc
+    run_neurite_and_downstream(stage_funcs, neuron_ids, gpu_max_tasks, stage_max_tasks, infer_batch_size)
 
     print("\nAll requested neurons have been processed in stage-batch mode.")
 
@@ -524,7 +725,7 @@ def main() -> None:
     if args.mode == "neuron":
         run_neuron_mode(stages, NEURON_IDS)
     else:
-        run_stage_batch_mode(stages, NEURON_IDS, args.stage_max_tasks)
+        run_stage_batch_mode(stages, NEURON_IDS, args.stage_max_tasks, args.gpu_max_tasks, args.infer_batch_size)
 
 
 if __name__ == "__main__":

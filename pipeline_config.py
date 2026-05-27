@@ -10,10 +10,12 @@ from pathlib import Path
 NEURON_IDS = list(range(120000, 120501))
 
 PIPELINE = {
-    # Default keeps the original one-neuron-at-a-time behavior. Override from
-    # the command line with: --mode stage-batch --stage-max-tasks 20
+    # Default keeps the stage-batch behavior. Override from the command line with:
+    # --mode stage-batch --stage-max-tasks 20 --gpu-max-tasks 1 --infer-batch-size 20
     "mode": "stage-batch",
     "stage_max_tasks": 20,
+    "gpu_max_tasks": 1,
+    "infer_batch_size": 20,
 }
 
 # Base dataset directory. The paths below may be absolute or relative to this.
@@ -42,10 +44,7 @@ PATHS = {
     "trace_output_dir": BASE_DIR / "trace_app2",
     "trace_swc_dir": BASE_DIR / "trace_app2" / "down_sampled_swcs_app2",
     "trace_marker_dir": BASE_DIR / "trace_app2" / "markers",
-    "trace_vis_dir": BASE_DIR / "trace_app2" / "vis_mip",
 
-    # Per-stage report-quality MIP snapshots written by run_pipeline.py.
-    "stage_mip_dir": BASE_DIR / "pipeline_mips",
     "trace_timeout_log": BASE_DIR / "trace_app2" / "record_timeout_5min.txt",
     "trace_error_log": BASE_DIR / "trace_app2" / "record_failed_5min.txt",
     "trace_cost_log": BASE_DIR / "trace_app2" / "record_cost_time_5min.txt",
@@ -99,12 +98,6 @@ PRUNING = {
     "downsample_scale": (1, 1, 1),
     "pre_traced": True,
     "verbose": True,
-}
-
-VISUALIZATION = {
-    # Save a report-quality MIP panel after each main stage that produces an image.
-    "save_stage_mips": True,
-    "dpi": 200,
 }
 
 # Toggle whole stages without changing code.
