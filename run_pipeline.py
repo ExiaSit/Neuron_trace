@@ -15,7 +15,7 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Callable, Iterable, Sequence,Union
 
 import matplotlib
 matplotlib.use("Agg")
@@ -27,7 +27,7 @@ import tifffile
 from pipeline_config import ENABLED_STAGES, GCUT, NEURON_IDS, NNUNET, PATHS, PIPELINE, PRUNING, SOMA, VISUALIZATION
 
 ROOT = Path(__file__).resolve().parent
-StageFunc = Callable[[int | str], None]
+StageFunc = Callable[[Union[int, str]], None]
 StageEntry = tuple[str, StageFunc]
 MIP_LOCK = threading.Lock()
 
@@ -335,7 +335,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--mode",
         choices=("neuron", "stage-batch"),
-        default=PIPELINE.get("mode", "neuron"),
+        default=PIPELINE.get("mode", "stage-batch"),
         help="neuron: keep the original one-neuron-at-a-time order; stage-batch: pipeline batches across stages.",
     )
     parser.add_argument(

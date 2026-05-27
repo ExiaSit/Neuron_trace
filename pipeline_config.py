@@ -12,7 +12,7 @@ NEURON_IDS = list(range(120000, 120501))
 PIPELINE = {
     # Default keeps the original one-neuron-at-a-time behavior. Override from
     # the command line with: --mode stage-batch --stage-max-tasks 20
-    "mode": "neuron",
+    "mode": "stage-batch",
     "stage_max_tasks": 20,
 }
 
