@@ -231,6 +231,44 @@ def run_nnunet_batch(
     return pending
 
 
+def run_nnunet_folder(
+    *,
+    input_dir: Path,
+    output_dir: Path,
+    dataset_id: str,
+    results_dir: str | Path,
+    expected_output_stems: Sequence[str],
+) -> None:
+    missing_outputs = [stem for stem in expected_output_stems if not (output_dir / f"{stem}.tif").exists()]
+    if not missing_outputs:
+        print(f"[skip] nnUNet folder outputs already exist in {output_dir}")
+        return
+    if not input_dir.exists():
+        raise FileNotFoundError(f"nnUNet input folder missing: {input_dir}")
+
+    missing_inputs = [stem for stem in expected_output_stems if not (input_dir / f"{stem}_0000.tif").exists()]
+    if missing_inputs:
+        raise FileNotFoundError(f"nnUNet input crops missing for: {missing_inputs[:10]}")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    set_nnunet_env(results_dir)
+    env = os.environ.copy()
+    env["CUDA_VISIBLE_DEVICES"] = str(NNUNET["gpu_id"])
+    cmd = build_nnunet_cmd(input_dir, output_dir, str(dataset_id))
+    print("[run] " + " ".join(cmd))
+    subprocess.run(cmd, check=True, env=env)
+
+
+def run_soma_infer_folder(neuron_ids: Sequence[int | str]) -> None:
+    run_nnunet_folder(
+        input_dir=Path(PATHS["soma_crop_dir"]),
+        output_dir=Path(PATHS["soma_seg_dir"]),
+        dataset_id=str(NNUNET["soma_dataset_id"]),
+        results_dir=NNUNET["soma_results"],
+        expected_output_stems=[image_stem(neuron_id) for neuron_id in neuron_ids],
+    )
+
+
 def run_nnunet_batch_with_output_watch(
     *,
     source_tifs: dict[int | str, Path],
@@ -694,7 +732,7 @@ def run_stage_batch_mode(
     print(f"  CPU/downstream max tasks: {stage_max_tasks}")
     print(f"  GPU batch processes: {gpu_max_tasks}")
     print(f"  nnUNet batch size: {infer_batch_size}")
-    print("  order: soma prefill first with per-neuron soma inference, then neurite batch inference; each stable neurite output triggers downstream")
+    print("  order: crop all soma inputs, run soma nnUNet on the crop folder once, then neurite batch inference; each stable neurite output triggers downstream")
 
     for stage_name in ("rescale", "soma_crop"):
         stage_func = stage_funcs.get(stage_name)
@@ -703,7 +741,8 @@ def run_stage_batch_mode(
         run_stage_for_neurons(stage_name, stage_func, neuron_ids, stage_max_tasks)
 
     if "soma_infer" in stage_funcs:
-        run_stage_for_neurons("soma_infer", stage_funcs["soma_infer"], neuron_ids, gpu_max_tasks)
+        print(f"\n--- soma_infer: folder input {PATHS['soma_crop_dir']} ---")
+        run_soma_infer_folder(neuron_ids)
 
     run_neurite_and_downstream(stage_funcs, neuron_ids, gpu_max_tasks, stage_max_tasks, infer_batch_size)
 
