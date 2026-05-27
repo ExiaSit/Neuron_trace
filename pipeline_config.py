@@ -7,10 +7,10 @@ orchestrator in ``run_pipeline.py`` reads all input/output locations from here.
 from pathlib import Path
 
 # Neurons are processed one-by-one in this order. Use integers or strings.
-NEURON_IDS = [62361]
+NEURON_IDS = list(range(120000, 120501))
 
 # Base dataset directory. The paths below may be absolute or relative to this.
-BASE_DIR = Path("/data/disk3/C6.0/app_test")
+BASE_DIR = Path("/mnt/d/pzy_tmp")
 
 PATHS = {
     # 1_rescale_cpu.py output and downstream 1um image input.
@@ -49,14 +49,16 @@ PATHS = {
     "gcut_selected_swc_dir": BASE_DIR / "gcut_output" / "selected_for_pruning",
 
     # 6_gcut_pruning_copy60228.py output.
-    "prune_output_dir": BASE_DIR / "gcut_pruned4",
-    "prune_mip_dir": BASE_DIR / "gcut_pruned4" / "pruning_mips",
-    "prune_swc_dir": BASE_DIR / "gcut_pruned4" / "pruning_swcs",
-    "prune_error_log": BASE_DIR / "gcut_pruned4" / "error_neurons.log",
+    "prune_output_dir": BASE_DIR / "gcut_pruned",
+    "prune_mip_dir": BASE_DIR / "gcut_pruned" / "pruning_mips",
+    "prune_swc_dir": BASE_DIR / "gcut_pruned" / "pruning_swcs",
+    "prune_error_log": BASE_DIR / "gcut_pruned" / "error_neurons.log",
 
     # External metadata / binaries.
-    "meta_file": Path("/home/pzy/Neuron_Trace/meta_260205.csv"),
-    "vaa3d_path": Path("/home/pzy/pzy/Vaa3D-x.1.1.4_Ubuntu/Vaa3D-x"),
+    "meta_file": Path("/mnt/d/pzy_tmp/meta_260526.csv"),
+    "vaa3d_path": Path("/mnt/d/pzy_tmp/Vaa3D-x.1.1.4_Ubuntu/Vaa3D-x"),
+    "pylib": "/mnt/d/pzy_tmp/lib/pylib",
+    "TraceFlow":"/mnt/d/pzy_tmp/lib/TraceFlow",
 }
 
 NNUNET = {
@@ -68,8 +70,8 @@ NNUNET = {
     "gpu_id": 0,
     "raw": "Wait_No_Need",
     "preprocessed": "Wait_No_Need",
-    "soma_results": "/data/disk/nnUNet_local/nnUNet_results",
-    "neurite_results": "/data/disk/nnUNet_local/nnUNet_results",
+    "soma_results": "/mnt/d/pzy_tmp/nnUNet_local/nnUNet_results",
+    "neurite_results": "/mnt/d/pzy_tmp/nnUNet_local/nnUNet_results",
 }
 
 SOMA = {
@@ -100,7 +102,7 @@ VISUALIZATION = {
 
 # Toggle whole stages without changing code. Stages still run sequentially.
 ENABLED_STAGES = {
-    "rescale": True,
+    "rescale": False,
     "soma_crop": True,
     "soma_infer": True,
     "neurite_infer": True,

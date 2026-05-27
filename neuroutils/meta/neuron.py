@@ -55,7 +55,8 @@ def get_neuron_meta(neuron_id: int, use_cache: bool = True) -> pd.DataFrame:
     else:
         raise ValueError("Unsupported metadata file format. Must be .csv or .xlsx.")
     # match = full_df[full_df["cell_id"].astype(str) == neuron_id]
-    match = full_df[full_df["Cell ID"].astype(int) == neuron_id]
+    match = full_df[full_df["cell_id"].astype(int) == neuron_id]
+    # match = full_df[full_df["Cell ID"].astype(int) == neuron_id]
     if match.empty:
         raise ValueError(f"Neuron ID {neuron_id} not found in metadata.")
 

@@ -15,19 +15,14 @@ import matplotlib.patches as patches  # 引入用于绘制圆圈的模块
 
 import concurrent.futures
 from tqdm import tqdm
+from pipeline_config import BASE_DIR, PATHS, GCUT
 
 
 # =========================================================================
 # 1. 动态加载本地 G-Cut 模块
 # =========================================================================
-current_dir = Path(__file__).parent.absolute()
-gcut_python_dir = current_dir / "gcut" / "python"
-
-if str(gcut_python_dir) not in sys.path:
-    sys.path.insert(0, str(gcut_python_dir))
-
 try:
-    sys.path.insert(0,"/home/pzy/Neuron_Trace/gcut/python")
+    sys.path.insert(0,"/mnt/d/pzy_tmp/lib/gcut/python")
     from neuron_segmentation import NeuronSegmentation
     GCUT_AVAILABLE = True
 except ImportError as e:
@@ -518,7 +513,7 @@ def process_image_to_gcut(img_path, mask_path, swc_path, vis_output_dir,
         img, binary_img, dist_transform, gsdt_mask, global_soma_mask, final_coords, soma_coords,
         app2_tree, split_trees, target_soma_id,
         combined_vis_path, nms_radius=NMS_RADIUS, title_prefix=img_path.name,
-        individual_output_dir=Path(vis_output_dir) / f"{img_path.stem}_comprehensive_panels"
+        individual_output_dir=None
     )
 
     return (intensity_threshold, soma_coords), "; ".join(log_messages)
@@ -575,30 +570,31 @@ def worker_task(args):
 # 6. 多进程调度与执行主程序
 # =========================================================================
 if __name__ == "__main__":
-    base_dir = "/data/disk3/C6.0/app_test"
+    base_dir = BASE_DIR
     # base_dir = "/data/disk2/B4.5"
-    img_dir = Path(base_dir) / "img"
-    mask_dir = Path(base_dir) / "mask"
-    swc_dir = Path(base_dir) / "trace_app2/down_sampled_swcs_app2" 
-    vis_dir = Path(base_dir) / "gcut_output" 
+    img_dir = PATHS["image_1um_dir"]
+    mask_dir = PATHS["merged_mask_dir"]
+    swc_dir = PATHS["trace_swc_dir"] 
+    vis_dir = PATHS["gcut_output_dir"]
+    result_dir = PATHS["gcut_selected_swc_dir"] 
     
-    soma_img_dir = Path(base_dir) / "soma_img"
-    soma_mask_dir = Path(base_dir) / "soma_seg"
+    soma_img_dir = PATHS["soma_crop_dir"]
+    soma_mask_dir = PATHS["soma_seg_dir"]
     
     vis_dir.mkdir(parents=True, exist_ok=True)
     
-    error_log_path = vis_dir / "error_log.txt"
+    error_log_path = PATHS[gcut_error_log]
     with open(error_log_path, "w", encoding="utf-8") as f:
         f.write("=== G-Cut Processing Exception Log ===\n")
         f.flush()
         
     # 读取 Meta 文件
-    meta_file_path = '/home/pzy/Neuron_Trace/meta_260205.csv'
+    meta_file_path = PATHS["meta_file"]
     print("Loading Metadata...")
     meta_df = pd.read_csv(meta_file_path, index_col='cell_id', low_memory=False)
     
-    TARGET_PERCENTILE = 55.0 
-    GSDT_THRESHOLD_X = 5.0    
+    TARGET_PERCENTILE = GCUT["target_percentile"] 
+    GSDT_THRESHOLD_X = GCUT["gsdt_threshold_x"]
     
     specific_task_ids = list()
     
@@ -620,9 +616,9 @@ if __name__ == "__main__":
     
     for original_img_file in files_to_process:
         temp_stem = original_img_file.stem.replace("_0000", "")
-        existing_targets = list(vis_dir.glob(f"{temp_stem}.swc"))
-        print(f"检查文件: {original_img_file}")
+        existing_targets = list(result_dir.glob(f"{temp_stem}.swc"))
         if len(existing_targets) > 0:
+            print(f" {original_img_file}已经处理")
             continue
             
         mask_file = mask_dir / original_img_file.name.replace("_0000.tif", ".tif")

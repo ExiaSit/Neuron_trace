@@ -16,13 +16,15 @@ import subprocess
 import shutil
 import math
 from multiprocessing import Process
+from pipeline_config import BASE_DIR
+
 
 # ================= Configure =================
 DATA_TYEP = "CELL_BLOCK" 
 TARGET_BLOCK_SIZE = (128, 128, 128)
 SAVE_MIP_VISUALIZATION = False
 
-base_path = "/data/disk3/zll/origin"
+base_path = BASE_DIR
 img_1um_dir = os.path.join(base_path, "img")
 soma_crop_dir = os.path.join(base_path, "soma_img")
 soma_seg_dir = os.path.join(base_path, "soma_seg")

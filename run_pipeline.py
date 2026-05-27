@@ -316,14 +316,20 @@ def run_prune(neuron_id: int | str, meta_df: pd.DataFrame) -> None:
     if result["status"] not in {"success", "skipped"}:
         with open(PATHS["prune_error_log"], "a", encoding="utf-8") as f:
             f.write(f"\n[{result['status'].upper()}] File: {result['file']}\n{result.get('msg', '')}\n")
-        raise RuntimeError(f"Pruning failed for {result['file']}: {result.get('msg', '')}")
+        # raise RuntimeError(f"Pruning failed for {result['file']}: {result.get('msg', '')}")
 
 
 def main() -> None:
     ensure_dirs()
     meta_df = None
     if ENABLED_STAGES.get("gcut") or ENABLED_STAGES.get("prune"):
-        meta_df = pd.read_csv(PATHS["meta_file"], index_col="cell_id", low_memory=False)
+        print(PATHS["meta_file"])
+        meta_df = pd.read_csv(
+        PATHS["meta_file"],
+        index_col="cell_id",
+        low_memory=False,
+        encoding="latin1"
+)
 
     stages = [
         ("rescale", run_rescale),

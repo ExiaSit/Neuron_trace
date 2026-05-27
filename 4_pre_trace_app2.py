@@ -20,17 +20,18 @@ from tqdm import tqdm
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from pipeline_config import BASE_DIR, PATHS
 
 # ================= 配置区域 =================
 # 1. Mask 路径
-base_dir ="/data/disk3/zll/origin"
-seg_dir = base_dir + "/mask"
+base_dir = BASE_DIR
+seg_dir = os.path.join(base_dir, "mask")
 
 # 2. 原图路径
-raw_img_dir = base_dir + "/img" 
+raw_img_dir = os.path.join(base_dir, "img")
 
 # 3. 输出路径
-output_dir = base_dir + "/trace_app2"
+output_dir = os.path.join(base_dir, "trace_app2")
 
 swc_dir = os.path.join(output_dir, "down_sampled_swcs_app2") 
 marker_dir = os.path.join(output_dir, "markers")
@@ -43,7 +44,7 @@ error_record = os.path.join(output_dir, "record_failed_5min.txt")
 cost_time_record = os.path.join(output_dir, "record_cost_time_5min.txt")
 
 # Vaa3D 程序路径
-V3D_PATH = "/home/pzy/pzy/Vaa3D-x.1.1.4_Ubuntu/Vaa3D-x" 
+V3D_PATH = PATHS["vaa3d_path"]
 # ===========================================
 
 os.makedirs(swc_dir, exist_ok=True)
@@ -216,7 +217,6 @@ def run_app2_locally(img_file, marker_file, out_swc_file, timeout_sec):
     cmd = (
         f'xvfb-run -a -s "-screen 0 640x480x16" {V3D_PATH} -x vn2 -f app2 -i {img_file} -p {marker_file} 0 10 0 1 1 1 1 10'
     )
-    
     env = os.environ.copy()
     ld_path = os.path.dirname(os.path.dirname(V3D_PATH)) + "/lib"
     

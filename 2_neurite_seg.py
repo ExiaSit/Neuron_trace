@@ -5,12 +5,13 @@ import shutil
 import math
 from multiprocessing import Process
 from tqdm import tqdm
+from pipeline_config import BASE_DIR
 
 # ================= 配置区 =================
-basic_path = "/data/disk/C6.0/app_test/"
+basic_path = BASE_DIR
 # basic_path = "/data/disk3/zll/origin"
 raw_input_dir = os.path.join(basic_path, 'img')
-final_output_dir = os.path.join(basic_path, '1um_neurite_seg_0424')
+final_output_dir = os.path.join(basic_path, '1um_neurite_seg')
 base_temp_dir = os.path.join(basic_path, 'temp_batch_input') 
 
 # [修改点 1]：定义可用的物理 GPU 列表

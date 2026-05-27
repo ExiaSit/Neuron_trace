@@ -31,12 +31,12 @@ from scipy.ndimage import binary_dilation, binary_erosion
 from scipy.spatial import cKDTree
 from skimage.graph import route_through_array, MCP_Geometric
 from collections import deque
-
-sys.path.insert(0, "/home/pzy/Neuron_Trace/pylib")
+from pipeline_config import PATHS,BASE_DIR
+sys.path.insert(0, PATHS["pylib"])
 from swc_handler import parse_swc, write_swc, flip_swc, shift_swc
 from morph_topo.morphology import Morphology, Topology
 
-sys.path.insert(0,"/home/pzy/Neuron_Trace/TraceFlow")
+sys.path.insert(0, PATHS["TraceFlow"])
 from core.visualization.debug_vis import plot_swc
 from core.io.image_parser import ImageParser
 from core.processing.filtering import (
@@ -1279,32 +1279,30 @@ def worker_task(input_imgfile, config):
 if __name__ == "__main__":
     import  multiprocessing
     multiprocessing.set_start_method('spawn', force=True)
-    # base_dir = "/data/disk/C6.0"
-    base_dir = "/data/disk/C6.0/app_test/test"
-    # base_dir = "/data/disk2/B4.5"
+    base_dir = BASE_DIR
     config = {
         'binary_input': True, 'tgamma': True, 'debug': True, 
         'sphere_zradius': 10, 
         'downsample_scale': np.array([1,1,1]),
-        'meta_file': '/home/pzy/Neuron_Trace/meta_260205.csv',
+        'meta_file': PATHS["meta_file"],
         'pre_traced': True,
-        'concat_dir': base_dir+'/mask',
-        'traced_dir': base_dir+'/gcut_output',
-        'raw_image_dir': base_dir+'/img', 
-        'mip_dir': base_dir+'/gcut_pruned4/pruning_mips',
-        'out_swc_dir': base_dir+'/gcut_pruned4/pruning_swcs',
-        'soma_img_dir': base_dir + '/soma_img',  
-        'soma_mask_dir': base_dir + '/soma_seg', 
+        'concat_dir': PATHS["merged_mask_dir"],
+        'traced_dir': PATHS["gcut_selected_swc_dir"],
+        'raw_image_dir': PATHS["image_1um_dir"], 
+        'mip_dir':PATHS["prune_mip_dir"] ,
+        'out_swc_dir':PATHS["prune_swc_dir"] ,
+        'soma_img_dir':PATHS["soma_crop_dir"] ,  
+        'soma_mask_dir':PATHS["soma_seg_dir"] , 
         'num_workers':8, 'verbose': True       
     }
 
 
-    log_file = base_dir+'/gcut_pruned4/error_neurons.log'
+    log_file = PATHS["prune_error_log"]
     os.makedirs(config['out_swc_dir'], exist_ok=True)
     os.makedirs(config['mip_dir'], exist_ok=True)
 
     print("Loading Metadata...")
-    config['meta'] = pd.read_csv(config['meta_file'], index_col='cell_id', low_memory=False)
+    config['meta'] = pd.read_csv(config['meta_file'], index_col='cell_id', low_memory=False,encoding="latin1")
 
     print(f"Scanning files in {config['concat_dir']} ...")
     input_files = []
