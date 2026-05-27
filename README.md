@@ -14,7 +14,7 @@ The stage-batch flow is:
 
 1. `rescale` prepares the 1um image input when enabled.
 2. `soma_crop` crops the soma block and writes the crop JSON.
-3. `soma_infer` runs nnUNet in batches over the soma crops.
+3. `soma_infer` runs over soma crops per neuron and skips existing soma masks.
 4. `neurite_infer` runs nnUNet in batches over the full 1um images.
 5. A watcher polls neurite segmentation outputs; each stable `image_<id>.tif` immediately triggers downstream work for that neuron.
 6. `merge` runs after the matching soma crop JSON, soma mask, and neurite mask are all present.
@@ -42,7 +42,7 @@ When deploying on a new machine, update `pipeline_config.py` first:
 - `NNUNET["gpu_id"]`, `NNUNET["device"]`, `NNUNET["configuration"]`, and `NNUNET["fold"]`: GPU/model runtime settings.
 - `PIPELINE["stage_max_tasks"]`: CPU/downstream concurrency.
 - `PIPELINE["gpu_max_tasks"]`: concurrent nnUNet batch processes, usually `1` for one GPU.
-- `PIPELINE["infer_batch_size"]`: number of neurons per nnUNet batch input directory.
+- `PIPELINE["infer_batch_size"]`: number of neurons per neurite nnUNet batch input directory.
 - `ENABLED_STAGES`: turn stages on/off without editing code.
 
 Optional algorithm settings are also in `pipeline_config.py`: `SOMA`, `GCUT`, and `PRUNING`.

@@ -306,19 +306,6 @@ def run_nnunet_batch_with_output_watch(
     return completed
 
 
-def run_soma_infer_batch(neuron_ids: Sequence[int | str], batch_size: int) -> None:
-    for batch_index, batch in enumerate(batched(neuron_ids, batch_size)):
-        source_tifs = {neuron_id: Path(PATHS["soma_crop_dir"]) / f"{image_stem(neuron_id)}_0000.tif" for neuron_id in batch}
-        run_nnunet_batch(
-            source_tifs=source_tifs,
-            output_dir=Path(PATHS["soma_seg_dir"]),
-            temp_dir=Path(PATHS["soma_temp_dir"]),
-            dataset_id=str(NNUNET["soma_dataset_id"]),
-            results_dir=NNUNET["soma_results"],
-            temp_name=f"soma_batch_{batch_index}_{image_stem(batch[0])}_{image_stem(batch[-1])}",
-        )
-
-
 def run_neurite_infer_batch_with_watch(
     neuron_ids: Sequence[int | str],
     batch_size: int,
@@ -349,6 +336,13 @@ def run_rescale(neuron_id: int | str) -> None:
 
 
 def run_soma_crop(neuron_id: int | str) -> None:
+    stem = image_stem(neuron_id)
+    crop_tif = Path(PATHS["soma_crop_dir"]) / f"{stem}_0000.tif"
+    crop_json = Path(PATHS["soma_crop_dir"]) / f"{stem}.json"
+    if crop_tif.exists() and crop_json.exists():
+        print(f"[skip] soma crop output exists: {crop_tif}, {crop_json}")
+        return
+
     mod = load_stage_module("stage_soma", "2_soma_crop_seg.py")
     mod.img_1um_dir = str(PATHS["image_1um_dir"])
     mod.soma_crop_dir = str(PATHS["soma_crop_dir"])
@@ -700,7 +694,7 @@ def run_stage_batch_mode(
     print(f"  CPU/downstream max tasks: {stage_max_tasks}")
     print(f"  GPU batch processes: {gpu_max_tasks}")
     print(f"  nnUNet batch size: {infer_batch_size}")
-    print("  order: soma prefill first, then neurite batch inference; each stable neurite output triggers downstream")
+    print("  order: soma prefill first with per-neuron soma inference, then neurite batch inference; each stable neurite output triggers downstream")
 
     for stage_name in ("rescale", "soma_crop"):
         stage_func = stage_funcs.get(stage_name)
@@ -709,8 +703,7 @@ def run_stage_batch_mode(
         run_stage_for_neurons(stage_name, stage_func, neuron_ids, stage_max_tasks)
 
     if "soma_infer" in stage_funcs:
-        print(f"\n--- soma_infer: {len(neuron_ids)} neurons, batch size {infer_batch_size} ---")
-        run_soma_infer_batch(neuron_ids, infer_batch_size)
+        run_stage_for_neurons("soma_infer", stage_funcs["soma_infer"], neuron_ids, gpu_max_tasks)
 
     run_neurite_and_downstream(stage_funcs, neuron_ids, gpu_max_tasks, stage_max_tasks, infer_batch_size)
 
