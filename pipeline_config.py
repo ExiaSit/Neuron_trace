@@ -6,8 +6,15 @@ orchestrator in ``run_pipeline.py`` reads all input/output locations from here.
 """
 from pathlib import Path
 
-# Neurons are processed one-by-one in this order. Use integers or strings.
+# Neurons are processed in this order. Use integers or strings.
 NEURON_IDS = list(range(120000, 120501))
+
+PIPELINE = {
+    # Default keeps the original one-neuron-at-a-time behavior. Override from
+    # the command line with: --mode stage-batch --stage-max-tasks 20
+    "mode": "neuron",
+    "stage_max_tasks": 20,
+}
 
 # Base dataset directory. The paths below may be absolute or relative to this.
 BASE_DIR = Path("/mnt/d/pzy_tmp")
@@ -100,7 +107,7 @@ VISUALIZATION = {
     "dpi": 200,
 }
 
-# Toggle whole stages without changing code. Stages still run sequentially.
+# Toggle whole stages without changing code.
 ENABLED_STAGES = {
     "rescale": False,
     "soma_crop": True,

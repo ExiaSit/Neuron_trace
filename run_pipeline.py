@@ -5,13 +5,17 @@ models instead of changing image-processing logic in the stage scripts.
 """
 from __future__ import annotations
 
+import argparse
+import concurrent.futures
 import importlib.util
 import os
+import queue
 import shutil
 import subprocess
 import sys
+import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Iterable, Sequence
 
 import matplotlib
 matplotlib.use("Agg")
@@ -20,9 +24,12 @@ import numpy as np
 import pandas as pd
 import tifffile
 
-from pipeline_config import ENABLED_STAGES, GCUT, NEURON_IDS, NNUNET, PATHS, PRUNING, SOMA, VISUALIZATION
+from pipeline_config import ENABLED_STAGES, GCUT, NEURON_IDS, NNUNET, PATHS, PIPELINE, PRUNING, SOMA, VISUALIZATION
 
 ROOT = Path(__file__).resolve().parent
+StageFunc = Callable[[int | str], None]
+StageEntry = tuple[str, StageFunc]
+MIP_LOCK = threading.Lock()
 
 
 def load_stage_module(module_name: str, filename: str) -> Any:
@@ -75,20 +82,21 @@ def save_volume_mip(volume_path: Path, stage_name: str, neuron_id: int | str) ->
         print(f"[mip skip] unsupported ndim={img.ndim}: {volume_path}")
         return
 
-    fig, axes = plt.subplots(1, len(projections), figsize=(6 * len(projections), 6), dpi=VISUALIZATION.get("dpi", 200))
-    if len(projections) == 1:
-        axes = [axes]
-    for ax, (title, mip) in zip(axes, projections):
-        vmax = np.percentile(mip, 99.5) if np.max(mip) > 0 else 1
-        if vmax <= 0:
-            vmax = np.max(mip) if np.max(mip) > 0 else 1
-        ax.imshow(mip, cmap="gray", vmin=0, vmax=vmax)
-        ax.set_title(f"{stage_name} {title}")
-        ax.axis("off")
-    fig.suptitle(f"Neuron {neuron_id} - {stage_name}")
-    fig.tight_layout()
-    fig.savefig(mip_dir / f"{stage_name}.png")
-    plt.close(fig)
+    with MIP_LOCK:
+        fig, axes = plt.subplots(1, len(projections), figsize=(6 * len(projections), 6), dpi=VISUALIZATION.get("dpi", 200))
+        if len(projections) == 1:
+            axes = [axes]
+        for ax, (title, mip) in zip(axes, projections):
+            vmax = np.percentile(mip, 99.5) if np.max(mip) > 0 else 1
+            if vmax <= 0:
+                vmax = np.max(mip) if np.max(mip) > 0 else 1
+            ax.imshow(mip, cmap="gray", vmin=0, vmax=vmax)
+            ax.set_title(f"{stage_name} {title}")
+            ax.axis("off")
+        fig.suptitle(f"Neuron {neuron_id} - {stage_name}")
+        fig.tight_layout()
+        fig.savefig(mip_dir / f"{stage_name}.png")
+        plt.close(fig)
 
 
 def find_gcut_target_swc(neuron_id: int | str) -> Path:
@@ -142,11 +150,12 @@ def run_nnunet_single(
         raise FileNotFoundError(f"nnUNet input missing: {source_tif}")
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    if temp_dir.exists():
-        shutil.rmtree(temp_dir)
-    temp_dir.mkdir(parents=True, exist_ok=True)
+    job_temp_dir = temp_dir / output_stem
+    if job_temp_dir.exists():
+        shutil.rmtree(job_temp_dir)
+    job_temp_dir.mkdir(parents=True, exist_ok=True)
 
-    temp_input = temp_dir / f"{output_stem}_0000.tif"
+    temp_input = job_temp_dir / f"{output_stem}_0000.tif"
     try:
         os.symlink(source_tif, temp_input)
     except OSError:
@@ -157,7 +166,7 @@ def run_nnunet_single(
     env["CUDA_VISIBLE_DEVICES"] = str(NNUNET["gpu_id"])
     cmd = [
         "nnUNetv2_predict",
-        "-i", str(temp_dir),
+        "-i", str(job_temp_dir),
         "-o", str(output_dir),
         "-d", str(dataset_id),
         "-c", str(NNUNET["configuration"]),
@@ -165,8 +174,10 @@ def run_nnunet_single(
         "-device", str(NNUNET["device"]),
     ]
     print("[run] " + " ".join(cmd))
-    subprocess.run(cmd, check=True, env=env)
-    shutil.rmtree(temp_dir, ignore_errors=True)
+    try:
+        subprocess.run(cmd, check=True, env=env)
+    finally:
+        shutil.rmtree(job_temp_dir, ignore_errors=True)
 
 
 def run_rescale(neuron_id: int | str) -> None:
@@ -220,7 +231,7 @@ def run_neurite_infer(neuron_id: int | str) -> None:
 def run_merge(neuron_id: int | str) -> None:
     mod = load_stage_module("stage_concat", "3.concat_neurite_soma.py")
     stem = image_stem(neuron_id)
-    tmp_json_dir = Path(PATHS["merge_temp_json_dir"])
+    tmp_json_dir = Path(PATHS["merge_temp_json_dir"]) / str(neuron_id)
     if tmp_json_dir.exists():
         shutil.rmtree(tmp_json_dir)
     tmp_json_dir.mkdir(parents=True, exist_ok=True)
@@ -319,41 +330,201 @@ def run_prune(neuron_id: int | str, meta_df: pd.DataFrame) -> None:
         # raise RuntimeError(f"Pruning failed for {result['file']}: {result.get('msg', '')}")
 
 
-def main() -> None:
-    ensure_dirs()
-    meta_df = None
-    if ENABLED_STAGES.get("gcut") or ENABLED_STAGES.get("prune"):
-        print(PATHS["meta_file"])
-        meta_df = pd.read_csv(
-        PATHS["meta_file"],
-        index_col="cell_id",
-        low_memory=False,
-        encoding="latin1"
-)
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run the neuron tracing pipeline.")
+    parser.add_argument(
+        "--mode",
+        choices=("neuron", "stage-batch"),
+        default=PIPELINE.get("mode", "neuron"),
+        help="neuron: keep the original one-neuron-at-a-time order; stage-batch: pipeline batches across stages.",
+    )
+    parser.add_argument(
+        "--stage-max-tasks",
+        type=int,
+        default=int(PIPELINE.get("stage_max_tasks", 1)),
+        help="Maximum neurons processed concurrently inside each stage in stage-batch mode.",
+    )
+    return parser.parse_args()
 
-    stages = [
+
+def load_meta_if_needed() -> pd.DataFrame | None:
+    if ENABLED_STAGES.get("gcut", True) or ENABLED_STAGES.get("prune", True):
+        print(PATHS["meta_file"])
+        return pd.read_csv(
+            PATHS["meta_file"],
+            index_col="cell_id",
+            low_memory=False,
+            encoding="latin1",
+        )
+    return None
+
+
+def build_stages(meta_df: pd.DataFrame | None) -> list[StageEntry]:
+    stages: list[StageEntry] = [
         ("rescale", run_rescale),
         ("soma_crop", run_soma_crop),
         ("soma_infer", run_soma_infer),
         ("neurite_infer", run_neurite_infer),
         ("merge", run_merge),
         ("app2_trace", run_app2_trace),
+        ("gcut", lambda neuron_id: run_gcut(neuron_id, meta_df)),
+        ("prune", lambda neuron_id: run_prune(neuron_id, meta_df)),
     ]
+    return [(stage_name, stage_func) for stage_name, stage_func in stages if ENABLED_STAGES.get(stage_name, True)]
 
-    for neuron_id in NEURON_IDS:
+
+def iter_batches(items: Sequence[int | str], batch_size: int) -> Iterable[list[int | str]]:
+    for start in range(0, len(items), batch_size):
+        yield list(items[start:start + batch_size])
+
+
+def run_stage_for_batch(stage_name: str, stage_func: StageFunc, neuron_ids: Sequence[int | str], max_tasks: int) -> None:
+    workers = min(max_tasks, len(neuron_ids))
+    print(f"\n--- {stage_name}: batch {neuron_ids[0]}..{neuron_ids[-1]} ({len(neuron_ids)} neurons, {workers} workers) ---")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+        future_to_neuron = {executor.submit(stage_func, neuron_id): neuron_id for neuron_id in neuron_ids}
+        for future in concurrent.futures.as_completed(future_to_neuron):
+            neuron_id = future_to_neuron[future]
+            try:
+                future.result()
+            except Exception as exc:
+                for pending in future_to_neuron:
+                    pending.cancel()
+                raise RuntimeError(f"Stage {stage_name} failed for neuron {neuron_id}") from exc
+
+
+def run_neuron_mode(stages: Sequence[StageEntry], neuron_ids: Sequence[int | str]) -> None:
+    for neuron_id in neuron_ids:
         print(f"\n========== Processing neuron {neuron_id} ==========")
         for stage_name, stage_func in stages:
-            if ENABLED_STAGES.get(stage_name, True):
-                print(f"\n--- {stage_name} ---")
-                stage_func(neuron_id)
-        if ENABLED_STAGES.get("gcut", True):
-            print("\n--- gcut ---")
-            run_gcut(neuron_id, meta_df)
-        if ENABLED_STAGES.get("prune", True):
-            print("\n--- prune ---")
-            run_prune(neuron_id, meta_df)
-
+            print(f"\n--- {stage_name} ---")
+            stage_func(neuron_id)
     print("\nAll requested neurons have been processed sequentially.")
+
+
+BASE_STAGE_DEPENDENCIES = {
+    "soma_crop": ("rescale",),
+    "soma_infer": ("soma_crop",),
+    "neurite_infer": ("rescale",),
+    # concat_neurite_soma.py needs both neurite segmentation and soma crop/seg outputs.
+    "merge": ("soma_crop", "soma_infer", "neurite_infer"),
+    "app2_trace": ("merge",),
+    "gcut": ("rescale", "soma_crop", "soma_infer", "merge", "app2_trace"),
+    "prune": ("merge", "gcut"),
+}
+
+
+def build_enabled_dependencies(stage_names: set[str]) -> dict[str, tuple[str, ...]]:
+    return {
+        stage_name: tuple(dep for dep in BASE_STAGE_DEPENDENCIES.get(stage_name, ()) if dep in stage_names)
+        for stage_name in stage_names
+    }
+
+
+def run_stage_batch_mode(stages: Sequence[StageEntry], neuron_ids: Sequence[int | str], stage_max_tasks: int) -> None:
+    if stage_max_tasks < 1:
+        raise ValueError("--stage-max-tasks must be >= 1")
+    if not stages:
+        print("\nNo enabled stages to run.")
+        return
+
+    batches = list(enumerate(iter_batches(neuron_ids, stage_max_tasks)))
+    if not batches:
+        print("\nNo neurons requested.")
+        return
+
+    stage_funcs = dict(stages)
+    stage_names = set(stage_funcs)
+    dependencies = build_enabled_dependencies(stage_names)
+    downstreams: dict[str, list[str]] = {stage_name: [] for stage_name in stage_names}
+    for stage_name, deps in dependencies.items():
+        for dep in deps:
+            downstreams[dep].append(stage_name)
+
+    ready_queues: dict[str, queue.Queue[Any]] = {stage_name: queue.Queue() for stage_name in stage_names}
+    errors: queue.Queue[tuple[str, int | None, list[int | str] | None, BaseException]] = queue.Queue()
+    completed_dependencies: dict[tuple[str, int], int] = {}
+    completed_work = 0
+    total_work = len(batches) * len(stages)
+    state_lock = threading.Lock()
+    done_event = threading.Event()
+    stop_event = threading.Event()
+    sentinel = object()
+
+    print("\nStage-batch dependencies:")
+    for stage_name, _stage_func in stages:
+        deps = dependencies[stage_name]
+        dep_text = ", ".join(deps) if deps else "input batch"
+        print(f"  {stage_name} <- {dep_text}")
+
+    for batch_index, batch in batches:
+        for stage_name, deps in dependencies.items():
+            if not deps:
+                ready_queues[stage_name].put((batch_index, batch))
+
+    def mark_complete(stage_name: str, batch_index: int, batch: list[int | str]) -> None:
+        nonlocal completed_work
+        with state_lock:
+            completed_work += 1
+            for next_stage in downstreams[stage_name]:
+                key = (next_stage, batch_index)
+                completed_dependencies[key] = completed_dependencies.get(key, 0) + 1
+                if completed_dependencies[key] == len(dependencies[next_stage]):
+                    ready_queues[next_stage].put((batch_index, batch))
+            if completed_work == total_work:
+                done_event.set()
+
+    def stage_worker(stage_name: str, stage_func: StageFunc) -> None:
+        input_queue = ready_queues[stage_name]
+        while True:
+            item = input_queue.get()
+            try:
+                if item is sentinel:
+                    return
+                batch_index, batch = item
+                if stop_event.is_set():
+                    continue
+                run_stage_for_batch(stage_name, stage_func, batch, stage_max_tasks)
+                mark_complete(stage_name, batch_index, batch)
+            except BaseException as exc:
+                stop_event.set()
+                batch_index = item[0] if isinstance(item, tuple) else None
+                batch = item[1] if isinstance(item, tuple) else None
+                errors.put((stage_name, batch_index, batch, exc))
+                done_event.set()
+                return
+            finally:
+                input_queue.task_done()
+
+    threads = [
+        threading.Thread(target=stage_worker, args=(stage_name, stage_func), name=f"stage-{stage_name}")
+        for stage_name, stage_func in stages
+    ]
+    for thread in threads:
+        thread.start()
+
+    done_event.wait()
+    for input_queue in ready_queues.values():
+        input_queue.put(sentinel)
+    for thread in threads:
+        thread.join()
+
+    if not errors.empty():
+        stage_name, batch_index, batch, exc = errors.get()
+        raise RuntimeError(f"Stage-batch pipeline failed in stage {stage_name} for batch #{batch_index}: {batch}") from exc
+
+    print("\nAll requested neurons have been processed in stage-batch mode.")
+
+
+def main() -> None:
+    args = parse_args()
+    ensure_dirs()
+    meta_df = load_meta_if_needed()
+    stages = build_stages(meta_df)
+    if args.mode == "neuron":
+        run_neuron_mode(stages, NEURON_IDS)
+    else:
+        run_stage_batch_mode(stages, NEURON_IDS, args.stage_max_tasks)
 
 
 if __name__ == "__main__":
