@@ -643,6 +643,20 @@ def process_neuron_morphology(input_imgfile, swc_neu, raw_imgfile, out_swc_dir, 
             
         plt.tight_layout()
         plt.savefig(os.path.join(mip_dir, f'{prefix}_combined_process.png'))
+
+        individual_dir = os.path.join(mip_dir, f'{prefix}_process_panels')
+        os.makedirs(individual_dir, exist_ok=True)
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        for i, (key, title) in enumerate(step_order):
+            safe_title = ''.join(c if c.isalnum() else '_' for c in key).strip('_')
+            bbox = axes[i].get_tightbbox(renderer).transformed(fig.dpi_scale_trans.inverted())
+            fig.savefig(
+                os.path.join(individual_dir, f'{i + 1:02d}_{safe_title}.png'),
+                dpi=300,
+                bbox_inches=bbox.expanded(1.08, 1.15),
+            )
+
         plt.close('all')
     # 1. 加载数据
     raw_image = ImageParser(raw_imgfile).load()
@@ -1204,11 +1218,18 @@ def check_exist(input_imgfile, traced_dir, raw_image_dir, out_swc_dir, binary_in
         f"{prefix.replace('_0000', '')}.swc", 
         f"{prefix}.swc"
     ]
-    swc_neu = next(
-        (os.path.join(traced_dir, name) for name in possible_swc_names 
-         if os.path.exists(os.path.join(traced_dir, name))), 
-        None
-    )
+    possible_swc_paths = [
+        os.path.join(traced_dir, name) for name in possible_swc_names
+    ]
+
+    # 5.gcut_pipeline.py writes names such as
+    # image_20000_0000_gcut_soma_1_TARGET.swc. Prefer TARGET if present.
+    possible_swc_paths.extend(sorted(glob.glob(os.path.join(traced_dir, f"{prefix}_gcut_soma_*_TARGET.swc"))))
+    possible_swc_paths.extend(sorted(glob.glob(os.path.join(traced_dir, f"{prefix.replace('_0000', '')}_gcut_soma_*_TARGET.swc"))))
+    possible_swc_paths.extend(sorted(glob.glob(os.path.join(traced_dir, f"{prefix}_gcut_soma_*.swc"))))
+    possible_swc_paths.extend(sorted(glob.glob(os.path.join(traced_dir, f"{prefix.replace('_0000', '')}_gcut_soma_*.swc"))))
+
+    swc_neu = next((path for path in possible_swc_paths if os.path.exists(path)), None)
     
     if not swc_neu:
         return False, f"Pre-traced SWC not found in {traced_dir} for {prefix}"

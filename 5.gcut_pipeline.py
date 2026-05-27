@@ -159,7 +159,7 @@ def get_binarization_threshold(img, mask, percentile_value=50.0):
 # =========================================================================
 def save_comprehensive_summary(img, binary_img, dist_transform, gsdt_mask, global_soma_mask, pre_nms_coords, post_nms_coords, 
                                app2_tree, split_trees, target_soma_id, 
-                               save_path, nms_radius=20.0, title_prefix=""):
+                               save_path, nms_radius=20.0, title_prefix="", individual_output_dir=None):
     """
     生成 2x4 的网格图。
     排列顺序呈左开口的U形:
@@ -288,6 +288,26 @@ def save_comprehensive_summary(img, binary_img, dist_transform, gsdt_mask, globa
 
     plt.tight_layout()
     plt.savefig(save_path, dpi=200)
+
+    if individual_output_dir is not None:
+        individual_output_dir = Path(individual_output_dir)
+        individual_output_dir.mkdir(parents=True, exist_ok=True)
+        panel_names = {
+            0: "01_original_image_mip",
+            1: "02_binarization_mask",
+            2: "03_gsdt_distance_map",
+            3: "04_pre_nms_candidates",
+            7: "05_post_nms_centers",
+            6: "06_original_app2_trace",
+            5: "07_gcut_segmented_all",
+            4: "08_gcut_target_neuron",
+        }
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        for idx, name in panel_names.items():
+            bbox = ax[idx].get_tightbbox(renderer).transformed(fig.dpi_scale_trans.inverted())
+            fig.savefig(individual_output_dir / f"{name}.png", dpi=300, bbox_inches=bbox.expanded(1.08, 1.15))
+
     plt.close(fig)
 
 
@@ -497,7 +517,8 @@ def process_image_to_gcut(img_path, mask_path, swc_path, vis_output_dir,
     save_comprehensive_summary(
         img, binary_img, dist_transform, gsdt_mask, global_soma_mask, final_coords, soma_coords,
         app2_tree, split_trees, target_soma_id,
-        combined_vis_path, nms_radius=NMS_RADIUS, title_prefix=img_path.name
+        combined_vis_path, nms_radius=NMS_RADIUS, title_prefix=img_path.name,
+        individual_output_dir=Path(vis_output_dir) / f"{img_path.stem}_comprehensive_panels"
     )
 
     return (intensity_threshold, soma_coords), "; ".join(log_messages)
