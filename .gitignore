@@ -16,3 +16,6 @@ env/
 # IDE
 .vscode/
 .idea/
+# Local machine-specific paths and runtime settings
+pipeline_config.py
+neuroutils/config/settings.py

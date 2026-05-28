@@ -7,13 +7,17 @@ from joblib import Parallel, delayed
 from skimage.transform import resize
 
 from scipy.ndimage import zoom 
+from pipeline_config import BASE_DIR, PATHS
 
 # 保持你原有的库引用
 from neuroutils.meta.neuron import get_source_v3d_img_file, get_xy_z_resolution
 from neuroutils.image.io import load_image
 
 # 路径配置
-test_dir = "/data/disk3/CUT/Dataset/img"
+# Direct script execution should use the same output directory as run_pipeline.py.
+# Previously this defaulted to BASE_DIR, so existing files under PATHS["image_1um_dir"]
+# were not detected and the script reprocessed neurons unnecessarily.
+test_dir = str(PATHS.get("image_1um_dir", BASE_DIR))
 os.makedirs(test_dir, exist_ok=True)
 GENERATE_JSON = False
 
@@ -22,13 +26,14 @@ def prepare_nnunet_file(neuron_id):
     json_file_name = f"image_{neuron_id}.json"
     nnunet_file_path = os.path.join(test_dir, nnunet_file_name)
     json_file_path =  os.path.join(test_dir, json_file_name)
-    
-    # 检查文件是否存在
+
+    # Fast path: do this before any metadata lookup or image import work.
     if os.path.exists(nnunet_file_path):
-        if not GENERATE_JSON:
+        if not GENERATE_JSON or os.path.exists(json_file_path):
+            print(nnunet_file_path + " already exists, skipping.")
             return
-        elif os.path.exists(json_file_path):
-            return
+
+    print(f"Processing neuron {neuron_id}...")
 
     # --- 1. 读取 ---
     try:
@@ -77,10 +82,11 @@ def try_repare_nnunet_file(neuron_id):
 
 if __name__ == "__main__":
     todo_neuron_ids = [i for i in range(130500,136278)]  
-    cpu_n_jobs = 20 
+    cpu_n_jobs = 1
     
     print(f"Starting processing with {cpu_n_jobs} parallel jobs on CPU...")
-    
-    Parallel(n_jobs=cpu_n_jobs)(
-        delayed(try_repare_nnunet_file)(neuron_id) for neuron_id in tqdm(todo_neuron_ids)
-    )
+    for neuron_id in tqdm(todo_neuron_ids):
+        try_repare_nnunet_file(neuron_id) 
+    # Parallel(n_jobs=cpu_n_jobs)(
+    #     delayed(try_repare_nnunet_file)(neuron_id) for neuron_id in tqdm(todo_neuron_ids)
+    # )

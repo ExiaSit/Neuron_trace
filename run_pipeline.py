@@ -786,9 +786,10 @@ def run_neurite_and_downstream(
                     try:
                         future.result()
                     except Exception as exc:
-                        for pending in future_to_batch:
-                            pending.cancel()
-                        raise RuntimeError(f"Stage neurite_infer failed for batch {batch}") from exc
+                        print(f"[skip] neurite_infer batch failed: {batch}; see {pipeline_skip_log_path()}")
+                        for neuron_id in batch:
+                            log_pipeline_exception("neurite_infer", neuron_id, exc)
+                        continue
         elif downstream_enabled:
             for neuron_id in neuron_ids:
                 submit_downstream(neuron_id)
