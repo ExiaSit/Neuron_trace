@@ -19,3 +19,5 @@ env/
 # Local machine-specific paths and runtime settings
 pipeline_config.py
 neuroutils/config/settings.py
+__pycache__/
+*.pyc
