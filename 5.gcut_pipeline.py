@@ -5,6 +5,7 @@ import scipy.ndimage as ndimage
 import sys
 import os
 import json
+import shutil
 import pandas as pd
 
 # 必须在导入 pyplot 之前设置为 'Agg'，防止多进程画图时 GUI 后端崩溃
@@ -22,7 +23,7 @@ from pipeline_config import BASE_DIR, PATHS, GCUT
 # 1. 动态加载本地 G-Cut 模块
 # =========================================================================
 try:
-    sys.path.insert(0,"/mnt/d/pzy_tmp/lib/gcut/python")
+    sys.path.insert(0,"/home/pzy/Neuron_Trace/gcut/python")
     from neuron_segmentation import NeuronSegmentation
     GCUT_AVAILABLE = True
 except ImportError as e:
@@ -51,6 +52,54 @@ def write_swc(tree, swc_file):
         for node in tree:
             idx, type_, x, y, z, r, p = node
             fp.write(f'{int(idx)} {int(type_)} {float(x):.5f} {float(y):.5f} {float(z):.5f} {float(r):.1f} {int(p)}\n')
+
+
+def swc_has_nodes(swc_file):
+    swc_file = Path(swc_file)
+    if not swc_file.exists() or swc_file.stat().st_size == 0:
+        return False
+    with open(swc_file, 'r', encoding='utf-8', errors='ignore') as fp:
+        for line in fp:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            if len(line.split()) >= 7:
+                return True
+    return False
+
+
+def selected_swc_path(result_dir, img_path):
+    return Path(result_dir) / f"{Path(img_path).stem.replace('_0000', '')}.swc"
+
+
+def find_gcut_target_swc(vis_dir, img_path):
+    stem = Path(img_path).stem
+    base_stem = stem.replace('_0000', '')
+    vis_dir = Path(vis_dir)
+    patterns = (
+        f"{stem}_gcut_soma_*_TARGET.swc",
+        f"{base_stem}_gcut_soma_*_TARGET.swc",
+        f"{stem}_gcut_soma_*.swc",
+        f"{base_stem}_gcut_soma_*.swc",
+    )
+    for pattern in patterns:
+        candidates = sorted(vis_dir.glob(pattern))
+        for candidate in candidates:
+            if swc_has_nodes(candidate):
+                return candidate
+    return None
+
+
+def prepare_selected_swc(result_dir, img_path, vis_dir):
+    selected_path = selected_swc_path(result_dir, img_path)
+    selected_path.parent.mkdir(parents=True, exist_ok=True)
+    if swc_has_nodes(selected_path):
+        return selected_path
+    target_swc = find_gcut_target_swc(vis_dir, img_path)
+    if target_swc is None:
+        return None
+    shutil.copy2(target_swc, selected_path)
+    return selected_path
 
 
 # =========================================================================
@@ -529,8 +578,17 @@ def extract_id(filename):
 
 def worker_task(args):
     """多进程的任务包装器"""
-    img_path, mask_path, swc_path, vis_dir, pct_val, gsdt_thr, error_log_path, soma_json_path, soma_mask_path, meta_df = args
+    if len(args) == 11:
+        img_path, mask_path, swc_path, vis_dir, pct_val, gsdt_thr, error_log_path, soma_json_path, soma_mask_path, meta_df, result_dir = args
+    else:
+        img_path, mask_path, swc_path, vis_dir, pct_val, gsdt_thr, error_log_path, soma_json_path, soma_mask_path, meta_df = args
+        result_dir = None
     try:
+        if result_dir is not None:
+            selected_path = selected_swc_path(result_dir, img_path)
+            if swc_has_nodes(selected_path):
+                return img_path.name, (0, []), f"跳过: selected_for_pruning 已存在 {selected_path}"
+
         neuron_id = int(extract_id(img_path.name))
         
         # 直接从传入的 DataFrame 获取数据
@@ -552,6 +610,13 @@ def worker_task(args):
             csv_target_coord, pct_val, gsdt_thr,
             soma_json_path, soma_mask_path
         )
+        if result_dir is not None and res is not None:
+            selected_path = prepare_selected_swc(result_dir, img_path, vis_dir)
+            if selected_path is None:
+                log_msg = f"{log_msg}; 失败: 未找到可用于 pruning 的 G-Cut SWC"
+                res = None
+            else:
+                log_msg = f"{log_msg}; selected_for_pruning: {selected_path}"
         
         if "跳过" in log_msg or "失败" in log_msg or "清理了" in log_msg:
             with open(error_log_path, "a", encoding="utf-8") as f:
@@ -584,8 +649,9 @@ if __name__ == "__main__":
     soma_mask_dir = PATHS["soma_seg_dir"]
     
     vis_dir.mkdir(parents=True, exist_ok=True)
+    result_dir.mkdir(parents=True, exist_ok=True)
     
-    error_log_path = PATHS[gcut_error_log]
+    error_log_path = PATHS["gcut_error_log"]
     with open(error_log_path, "w", encoding="utf-8") as f:
         f.write("=== G-Cut Processing Exception Log ===\n")
         f.flush()
@@ -618,9 +684,13 @@ if __name__ == "__main__":
     
     for original_img_file in files_to_process:
         temp_stem = original_img_file.stem.replace("_0000", "")
-        existing_targets = list(result_dir.glob(f"{temp_stem}.swc"))
-        if len(existing_targets) > 0:
-            print(f" {original_img_file}已经处理")
+        selected_path = result_dir / f"{temp_stem}.swc"
+        if swc_has_nodes(selected_path):
+            print(f"{original_img_file} 已经处理: {selected_path}")
+            continue
+        prepared_selected = prepare_selected_swc(result_dir, original_img_file, vis_dir)
+        if prepared_selected is not None:
+            print(f"{original_img_file} 已有 G-Cut 结果，已补齐 selected_for_pruning: {prepared_selected}")
             continue
             
         mask_file = mask_dir / original_img_file.name.replace("_0000.tif", ".tif")
@@ -636,7 +706,7 @@ if __name__ == "__main__":
         tasks.append((
             original_img_file, mask_file, swc_file, vis_dir, 
             TARGET_PERCENTILE, GSDT_THRESHOLD_X, error_log_path,
-            soma_json_path, soma_mask_path, meta_df
+            soma_json_path, soma_mask_path, meta_df, result_dir
         ))
 
     results = {}

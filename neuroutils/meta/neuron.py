@@ -51,7 +51,7 @@ def get_neuron_meta(neuron_id: int, use_cache: bool = True) -> pd.DataFrame:
     if(NEURON_META_INFO_PATH.endswith(".xlsx")):
         full_df = pd.read_excel(NEURON_META_INFO_PATH, engine='openpyxl')
     elif(NEURON_META_INFO_PATH.endswith(".csv")):
-        full_df = pd.read_csv(NEURON_META_INFO_PATH, encoding="gbk")
+        full_df = pd.read_csv(NEURON_META_INFO_PATH, encoding="gbk", low_memory=False)
     else:
         raise ValueError("Unsupported metadata file format. Must be .csv or .xlsx.")
     # match = full_df[full_df["cell_id"].astype(str) == neuron_id]

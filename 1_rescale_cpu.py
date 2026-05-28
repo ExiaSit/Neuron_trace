@@ -76,7 +76,7 @@ def try_repare_nnunet_file(neuron_id):
         print(f"Error wrapper {neuron_id}: {e}")
 
 if __name__ == "__main__":
-    todo_neuron_ids = [i for i in range(20000,20001)]  
+    todo_neuron_ids = [i for i in range(130500,136278)]  
     cpu_n_jobs = 20 
     
     print(f"Starting processing with {cpu_n_jobs} parallel jobs on CPU...")

@@ -7,7 +7,7 @@ orchestrator in ``run_pipeline.py`` reads all input/output locations from here.
 from pathlib import Path
 
 # Neurons are processed in this order. Use integers or strings.
-NEURON_IDS = list(range(120000, 120501))
+NEURON_IDS = list(range(130000, 130500))
 
 PIPELINE = {
     # Default keeps the stage-batch behavior. Override from the command line with:
@@ -19,7 +19,7 @@ PIPELINE = {
 }
 
 # Base dataset directory. The paths below may be absolute or relative to this.
-BASE_DIR = Path("/mnt/d/pzy_tmp")
+BASE_DIR = Path("/data/disk3/130k")
 
 PATHS = {
     # 1_rescale_cpu.py output and downstream 1um image input.
@@ -32,13 +32,14 @@ PATHS = {
     "soma_skipped_log": BASE_DIR / "skipped_neurons.txt",
 
     # 2_neurite_seg.py nnUNet output.
-    "neurite_seg_dir": BASE_DIR / "1um_neurite_seg_0424",
+    "neurite_seg_dir": BASE_DIR / "1um_neurite_seg_0527",
     "neurite_temp_dir": BASE_DIR / "neurite_temp_single_input",
 
     # 3.concat_neurite_soma.py output.
     "merged_mask_dir": BASE_DIR / "mask",
     "merge_temp_json_dir": BASE_DIR / ".pipeline_tmp" / "merge_json",
     "merge_error_log": BASE_DIR / "merge_failed_log.txt",
+    "pipeline_skip_log": BASE_DIR / "pipeline_skipped_neurons.log",
 
     # 4_pre_trace_app2.py output.
     "trace_output_dir": BASE_DIR / "trace_app2",
@@ -61,10 +62,10 @@ PATHS = {
     "prune_error_log": BASE_DIR / "gcut_pruned" / "error_neurons.log",
 
     # External metadata / binaries.
-    "meta_file": Path("/mnt/d/pzy_tmp/meta_260526.csv"),
-    "vaa3d_path": Path("/mnt/d/pzy_tmp/Vaa3D-x.1.1.4_Ubuntu/Vaa3D-x"),
-    "pylib": "/mnt/d/pzy_tmp/lib/pylib",
-    "TraceFlow":"/mnt/d/pzy_tmp/lib/TraceFlow",
+    "meta_file": Path("/home/pzy/Neuron_Trace/meta_260526.csv"),
+    "vaa3d_path": Path("/home/pzy/pzy/Vaa3D-x.1.1.4_Ubuntu/Vaa3D-x"),
+    "pylib": "/home/pzy/Neuron_Trace/pylib",
+    "TraceFlow":"/home/pzy/Neuron_Trace/TraceFlow",
 }
 
 NNUNET = {
@@ -76,8 +77,8 @@ NNUNET = {
     "gpu_id": 0,
     "raw": "Wait_No_Need",
     "preprocessed": "Wait_No_Need",
-    "soma_results": "/mnt/d/pzy_tmp/nnUNet_local/nnUNet_results",
-    "neurite_results": "/mnt/d/pzy_tmp/nnUNet_local/nnUNet_results",
+    "soma_results": "/data/disk/nnUNet_local/nnUNet_results",
+    "neurite_results": "/data/disk/nnUNet_local/nnUNet_results",
 }
 
 SOMA = {

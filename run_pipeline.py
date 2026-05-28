@@ -10,9 +10,11 @@ import concurrent.futures
 import importlib.util
 import os
 import time
+import traceback
 import shutil
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence, Union
 
@@ -22,7 +24,7 @@ import pandas as pd
 from pipeline_config import ENABLED_STAGES, GCUT, NEURON_IDS, NNUNET, PATHS, PIPELINE, PRUNING, SOMA
 
 ROOT = Path(__file__).resolve().parent
-StageFunc = Callable[[Union[int, str]], None]
+StageFunc = Callable[[Union[int, str]], Any]
 StageEntry = tuple[str, StageFunc]
 
 
@@ -69,6 +71,14 @@ def find_gcut_target_swc(neuron_id: int | str) -> Path:
     return candidates[0]
 
 
+def gcut_selected_swc_path(neuron_id: int | str) -> Path:
+    return Path(PATHS["gcut_selected_swc_dir"]) / f"{image_stem(neuron_id)}.swc"
+
+
+def prune_output_swc_path(neuron_id: int | str) -> Path:
+    return Path(PATHS["prune_swc_dir"]) / f"{image_stem(neuron_id)}.swc"
+
+
 def prepare_gcut_swc_for_pruning(neuron_id: int | str) -> Path:
     """Copy the selected G-Cut SWC to a pruning-compatible name.
 
@@ -77,10 +87,14 @@ def prepare_gcut_swc_for_pruning(neuron_id: int | str) -> Path:
     image_<id>_0000_gcut_soma_1_TARGET.swc, so the orchestrator creates a
     compatibility copy without changing G-Cut output naming.
     """
-    source_swc = find_gcut_target_swc(neuron_id)
     selected_dir = Path(PATHS["gcut_selected_swc_dir"])
     selected_dir.mkdir(parents=True, exist_ok=True)
-    compat_swc = selected_dir / f"{image_stem(neuron_id)}.swc"
+    compat_swc = gcut_selected_swc_path(neuron_id)
+    if swc_has_nodes(compat_swc):
+        print(f"[skip] G-Cut selected SWC exists: {compat_swc}")
+        return compat_swc
+
+    source_swc = find_gcut_target_swc(neuron_id)
     shutil.copy2(source_swc, compat_swc)
     print(f"[gcut] selected for pruning: {source_swc} -> {compat_swc}")
     return compat_swc
@@ -177,7 +191,10 @@ def prepare_nnunet_batch_input(
             print(f"[skip] nnUNet output exists: {output_path}")
             continue
         if not source_tif.exists():
-            raise FileNotFoundError(f"nnUNet input missing: {source_tif}")
+            reason = f"nnUNet input missing: {source_tif}"
+            print(f"[skip] {stem}: {reason}")
+            log_pipeline_skip(pipeline_skip_log_path(), neuron_id, reason)
+            continue
         temp_input = job_temp_dir / f"{stem}_0000.tif"
         try:
             os.symlink(source_tif, temp_input)
@@ -238,35 +255,54 @@ def run_nnunet_folder(
     dataset_id: str,
     results_dir: str | Path,
     expected_output_stems: Sequence[str],
-) -> None:
-    missing_outputs = [stem for stem in expected_output_stems if not (output_dir / f"{stem}.tif").exists()]
+) -> list[str]:
+    existing_outputs = [stem for stem in expected_output_stems if (output_dir / f"{stem}.tif").exists()]
+    missing_outputs = [stem for stem in expected_output_stems if stem not in existing_outputs]
     if not missing_outputs:
         print(f"[skip] nnUNet folder outputs already exist in {output_dir}")
-        return
+        return existing_outputs
     if not input_dir.exists():
         raise FileNotFoundError(f"nnUNet input folder missing: {input_dir}")
 
-    missing_inputs = [stem for stem in expected_output_stems if not (input_dir / f"{stem}_0000.tif").exists()]
-    if missing_inputs:
-        raise FileNotFoundError(f"nnUNet input crops missing for: {missing_inputs[:10]}")
+    runnable_stems: list[str] = []
+    for stem in missing_outputs:
+        input_path = input_dir / f"{stem}_0000.tif"
+        if input_path.exists():
+            runnable_stems.append(stem)
+            continue
+        reason = f"nnUNet input crop missing: {input_path}"
+        print(f"[skip] {stem}: {reason}")
+        log_pipeline_skip(pipeline_skip_log_path(), neuron_id_from_image_stem(stem), reason)
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    set_nnunet_env(results_dir)
-    env = os.environ.copy()
-    env["CUDA_VISIBLE_DEVICES"] = str(NNUNET["gpu_id"])
-    cmd = build_nnunet_cmd(input_dir, output_dir, str(dataset_id))
-    print("[run] " + " ".join(cmd))
-    subprocess.run(cmd, check=True, env=env)
+    if runnable_stems:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        set_nnunet_env(results_dir)
+        env = os.environ.copy()
+        env["CUDA_VISIBLE_DEVICES"] = str(NNUNET["gpu_id"])
+        cmd = build_nnunet_cmd(input_dir, output_dir, str(dataset_id))
+        print("[run] " + " ".join(cmd))
+        subprocess.run(cmd, check=True, env=env)
+
+    ready_stems = [stem for stem in expected_output_stems if (output_dir / f"{stem}.tif").exists()]
+    for stem in runnable_stems:
+        if stem not in ready_stems:
+            output_path = output_dir / f"{stem}.tif"
+            reason = f"nnUNet output missing after successful folder inference: {output_path}"
+            print(f"[skip] {stem}: {reason}")
+            log_pipeline_skip(pipeline_skip_log_path(), neuron_id_from_image_stem(stem), reason)
+    return ready_stems
 
 
-def run_soma_infer_folder(neuron_ids: Sequence[int | str]) -> None:
-    run_nnunet_folder(
+def run_soma_infer_folder(neuron_ids: Sequence[int | str]) -> list[int | str]:
+    ready_stems = run_nnunet_folder(
         input_dir=Path(PATHS["soma_crop_dir"]),
         output_dir=Path(PATHS["soma_seg_dir"]),
         dataset_id=str(NNUNET["soma_dataset_id"]),
         results_dir=NNUNET["soma_results"],
         expected_output_stems=[image_stem(neuron_id) for neuron_id in neuron_ids],
     )
+    ready = set(ready_stems)
+    return [neuron_id for neuron_id in neuron_ids if image_stem(neuron_id) in ready]
 
 
 def run_nnunet_batch_with_output_watch(
@@ -332,7 +368,11 @@ def run_nnunet_batch_with_output_watch(
         for neuron_id in list(remaining):
             output_path = output_dir / f"{image_stem(neuron_id)}.tif"
             if not is_file_stable(output_path, stable_seconds=0.0):
-                raise FileNotFoundError(f"nnUNet output missing or still changing: {output_path}")
+                reason = f"nnUNet output missing or still changing after successful inference: {output_path}"
+                print(f"[skip] {image_stem(neuron_id)}: {reason}")
+                log_pipeline_skip(pipeline_skip_log_path(), neuron_id, reason)
+                remaining.remove(neuron_id)
+                continue
             remaining.remove(neuron_id)
             completed.append(neuron_id)
             on_output_ready(neuron_id)
@@ -467,9 +507,14 @@ def run_app2_trace(neuron_id: int | str) -> None:
 
 
 def run_gcut(neuron_id: int | str, meta_df: pd.DataFrame) -> bool:
-    mod = load_stage_module("stage_gcut", "5.gcut_pipeline.py")
     Path(PATHS["gcut_output_dir"]).mkdir(parents=True, exist_ok=True)
     stem = image_stem(neuron_id)
+    selected_swc = gcut_selected_swc_path(neuron_id)
+    if swc_has_nodes(selected_swc):
+        print(f"[skip] G-Cut selected SWC exists: {selected_swc}")
+        return True
+
+    mod = load_stage_module("stage_gcut", "5.gcut_pipeline.py")
     swc_path = Path(PATHS["trace_swc_dir"]) / f"{stem}.swc"
     if not swc_has_nodes(swc_path):
         reason = f"APP2 SWC is empty or has no valid nodes: {swc_path}"
@@ -503,10 +548,15 @@ def run_gcut(neuron_id: int | str, meta_df: pd.DataFrame) -> bool:
 
 
 def run_prune(neuron_id: int | str, meta_df: pd.DataFrame) -> None:
-    prepare_gcut_swc_for_pruning(neuron_id)
-    mod = load_stage_module("stage_prune", "6_gcut_pruning_copy60228.py")
     Path(PATHS["prune_mip_dir"]).mkdir(parents=True, exist_ok=True)
     Path(PATHS["prune_swc_dir"]).mkdir(parents=True, exist_ok=True)
+    pruned_swc = prune_output_swc_path(neuron_id)
+    if swc_has_nodes(pruned_swc):
+        print(f"[skip] pruning SWC exists: {pruned_swc}")
+        return
+
+    prepare_gcut_swc_for_pruning(neuron_id)
+    mod = load_stage_module("stage_prune", "6_gcut_pruning_copy60228.py")
     config = {
         **PRUNING,
         "downsample_scale": np.array(PRUNING["downsample_scale"]),
@@ -582,11 +632,12 @@ def build_stages(meta_df: pd.DataFrame | None) -> list[StageEntry]:
     return [(stage_name, stage_func) for stage_name, stage_func in stages if ENABLED_STAGES.get(stage_name, True)]
 
 
-def run_stage_for_neurons(stage_name: str, stage_func: StageFunc, neuron_ids: Sequence[int | str], max_tasks: int) -> None:
+def run_stage_for_neurons(stage_name: str, stage_func: StageFunc, neuron_ids: Sequence[int | str], max_tasks: int) -> list[int | str]:
     if not neuron_ids:
-        return
+        return []
     workers = min(max_tasks, len(neuron_ids))
     print(f"\n--- {stage_name}: {len(neuron_ids)} neurons, {workers} workers ---")
+    completed: list[int | str] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
         future_to_neuron = {executor.submit(stage_func, neuron_id): neuron_id for neuron_id in neuron_ids}
         for future in concurrent.futures.as_completed(future_to_neuron):
@@ -594,9 +645,12 @@ def run_stage_for_neurons(stage_name: str, stage_func: StageFunc, neuron_ids: Se
             try:
                 future.result()
             except Exception as exc:
-                for pending in future_to_neuron:
-                    pending.cancel()
-                raise RuntimeError(f"Stage {stage_name} failed for neuron {neuron_id}") from exc
+                log_pipeline_exception(stage_name, neuron_id, exc)
+                continue
+            completed.append(neuron_id)
+    if not completed:
+        raise RuntimeError(f"Stage {stage_name} failed or skipped all {len(neuron_ids)} neurons; see {pipeline_skip_log_path()}")
+    return completed
 
 
 def run_neuron_mode(stages: Sequence[StageEntry], neuron_ids: Sequence[int | str]) -> None:
@@ -604,7 +658,11 @@ def run_neuron_mode(stages: Sequence[StageEntry], neuron_ids: Sequence[int | str
         print(f"\n========== Processing neuron {neuron_id} ==========")
         for stage_name, stage_func in stages:
             print(f"\n--- {stage_name} ---")
-            result = stage_func(neuron_id)
+            try:
+                result = stage_func(neuron_id)
+            except Exception as exc:
+                log_pipeline_exception(stage_name, neuron_id, exc)
+                break
             if stage_name == "gcut" and result is False:
                 print(f"[skip] neuron {neuron_id}: G-Cut skipped, pruning will not run.")
                 break
@@ -641,25 +699,54 @@ def swc_has_nodes(swc_path: Path) -> bool:
     return False
 
 
+def pipeline_skip_log_path() -> Path:
+    return Path(PATHS.get("pipeline_skip_log", Path(PATHS["merge_error_log"]).parent / "pipeline_skipped_neurons.log"))
+
+
+def neuron_id_from_image_stem(stem: str) -> str:
+    return stem.removeprefix("image_")
+
+
 def log_pipeline_skip(log_path: Path, neuron_id: int | str, reason: str) -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     with open(log_path, "a", encoding="utf-8") as f:
-        f.write(f"[{image_stem(neuron_id)}] SKIP: {reason}\n")
+        f.write(f"[{timestamp}] [{image_stem(neuron_id)}] SKIP: {reason}\n")
+
+
+def log_pipeline_exception(stage_name: str, neuron_id: int | str, exc: BaseException) -> None:
+    reason = f"{stage_name}: {type(exc).__name__}: {exc}"
+    print(f"[skip] neuron {neuron_id}: {reason}")
+    log_path = pipeline_skip_log_path()
+    log_pipeline_skip(log_path, neuron_id, reason)
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(traceback.format_exc())
+        f.write("\n")
 
 
 def run_downstream_after_neurite(stage_funcs: dict[str, StageFunc], neuron_id: int | str) -> None:
     if "merge" in stage_funcs:
         if not soma_outputs_ready(neuron_id):
-            raise FileNotFoundError(f"Soma crop json or soma mask is missing for neuron {neuron_id}; merge is not safe to run.")
+            reason = f"Soma crop json or soma mask is missing for neuron {neuron_id}; merge is not safe to run."
+            print(f"[skip] neuron {neuron_id}: {reason}")
+            log_pipeline_skip(pipeline_skip_log_path(), neuron_id, reason)
+            return
         if "neurite_infer" not in stage_funcs and not neurite_output_ready(neuron_id):
-            raise FileNotFoundError(f"Neurite segmentation is missing for neuron {neuron_id}; merge is not safe to run.")
+            reason = f"Neurite segmentation is missing for neuron {neuron_id}; merge is not safe to run."
+            print(f"[skip] neuron {neuron_id}: {reason}")
+            log_pipeline_skip(pipeline_skip_log_path(), neuron_id, reason)
+            return
 
     for stage_name in DOWNSTREAM_AFTER_NEURITE_STAGES:
         stage_func = stage_funcs.get(stage_name)
         if stage_func is None:
             continue
         print(f"\n--- {stage_name}: neuron {neuron_id} ---")
-        result = stage_func(neuron_id)
+        try:
+            result = stage_func(neuron_id)
+        except Exception as exc:
+            log_pipeline_exception(stage_name, neuron_id, exc)
+            break
         if stage_name == "gcut" and result is False:
             print(f"[skip] neuron {neuron_id}: G-Cut skipped, pruning will not run.")
             break
@@ -673,12 +760,15 @@ def run_neurite_and_downstream(
     infer_batch_size: int,
 ) -> None:
     downstream_enabled = any(stage_name in stage_funcs for stage_name in DOWNSTREAM_AFTER_NEURITE_STAGES)
-    downstream_futures: list[concurrent.futures.Future[None]] = []
+    downstream_futures: dict[concurrent.futures.Future[None], int | str] = {}
+    downstream_futures_lock = threading.Lock()
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=downstream_max_tasks) as downstream_executor:
         def submit_downstream(neuron_id: int | str) -> None:
             if downstream_enabled:
-                downstream_futures.append(downstream_executor.submit(run_downstream_after_neurite, stage_funcs, neuron_id))
+                future = downstream_executor.submit(run_downstream_after_neurite, stage_funcs, neuron_id)
+                with downstream_futures_lock:
+                    downstream_futures[future] = neuron_id
 
         if "neurite_infer" in stage_funcs:
             print(
@@ -704,7 +794,11 @@ def run_neurite_and_downstream(
                 submit_downstream(neuron_id)
 
         for future in concurrent.futures.as_completed(downstream_futures):
-            future.result()
+            neuron_id = downstream_futures[future]
+            try:
+                future.result()
+            except Exception as exc:
+                log_pipeline_exception("downstream", neuron_id, exc)
 
 
 def run_stage_batch_mode(
@@ -734,17 +828,20 @@ def run_stage_batch_mode(
     print(f"  nnUNet batch size: {infer_batch_size}")
     print("  order: crop all soma inputs, run soma nnUNet on the crop folder once, then neurite batch inference; each stable neurite output triggers downstream")
 
+    active_neuron_ids = list(neuron_ids)
     for stage_name in ("rescale", "soma_crop"):
         stage_func = stage_funcs.get(stage_name)
         if stage_func is None:
             continue
-        run_stage_for_neurons(stage_name, stage_func, neuron_ids, stage_max_tasks)
+        active_neuron_ids = run_stage_for_neurons(stage_name, stage_func, active_neuron_ids, stage_max_tasks)
 
     if "soma_infer" in stage_funcs:
         print(f"\n--- soma_infer: folder input {PATHS['soma_crop_dir']} ---")
-        run_soma_infer_folder(neuron_ids)
+        active_neuron_ids = run_soma_infer_folder(active_neuron_ids)
+        if not active_neuron_ids:
+            raise RuntimeError(f"Stage soma_infer produced no usable neurons; see {pipeline_skip_log_path()}")
 
-    run_neurite_and_downstream(stage_funcs, neuron_ids, gpu_max_tasks, stage_max_tasks, infer_batch_size)
+    run_neurite_and_downstream(stage_funcs, active_neuron_ids, gpu_max_tasks, stage_max_tasks, infer_batch_size)
 
     print("\nAll requested neurons have been processed in stage-batch mode.")
 

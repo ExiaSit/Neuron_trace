@@ -54,6 +54,24 @@ import traceback
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 
+def swc_has_nodes(swc_file):
+    if not os.path.exists(swc_file) or os.path.getsize(swc_file) == 0:
+        return False
+    with open(swc_file, 'r', encoding='utf-8', errors='ignore') as fp:
+        for line in fp:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            if len(line.split()) >= 7:
+                return True
+    return False
+
+
+def prune_output_swc_path(input_imgfile, out_swc_dir):
+    prefix = os.path.splitext(os.path.basename(input_imgfile))[0]
+    return os.path.join(out_swc_dir, f'{prefix}.swc')
+
+
 class NeuronGraphProcessor:
     def __init__(self, graph, coords_dict, sxyz, scale_xyz, conf_length=5):
         self.graph = graph
@@ -1189,8 +1207,8 @@ def check_exist(input_imgfile, traced_dir, raw_image_dir, out_swc_dir, binary_in
     filename = os.path.basename(input_imgfile)
     prefix, ext = os.path.splitext(filename)
     
-    out_swc_path = os.path.join(out_swc_dir, f'{prefix}{ext}.swc')
-    if os.path.exists(out_swc_path):
+    out_swc_path = prune_output_swc_path(input_imgfile, out_swc_dir)
+    if swc_has_nodes(out_swc_path):
         return False, f"Already processed: {out_swc_path}"
 
     cell_id_str = next((p for p in prefix.split('_') if p.isdigit()), None)
@@ -1299,9 +1317,7 @@ if __name__ == "__main__":
                 input_files.append(entry.path)
     input_files.sort()
     
-    input_files = [f for f in input_files if not os.path.exists(
-        os.path.join(config['mip_dir'], os.path.basename(f).replace(".tif", "")+"_combined_process.png")
-    )]
+    input_files = [f for f in input_files if not swc_has_nodes(prune_output_swc_path(f, config['out_swc_dir']))]
     # input_files =[f for f in input_files if os.path.basename(f)=="image_108547.tif"]
     print(f"Found {len(input_files)} files. Starting processing with {config['num_workers']} workers...")
 
