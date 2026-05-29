@@ -23,7 +23,7 @@ from pipeline_config import BASE_DIR, PATHS, GCUT
 # 1. 动态加载本地 G-Cut 模块
 # =========================================================================
 try:
-    sys.path.insert(0,"/home/pzy/Neuron_Trace/gcut/python")
+    sys.path.insert(0,PATHS["gcut"])  # 将 G-Cut 模块路径添加到 sys.path
     from neuron_segmentation import NeuronSegmentation
     GCUT_AVAILABLE = True
 except ImportError as e:
@@ -639,6 +639,7 @@ def worker_task(args):
 if __name__ == "__main__":
     base_dir = BASE_DIR
     # base_dir = "/data/disk2/B4.5"
+    print(PATHS["gcut"])
     img_dir = PATHS["image_1um_dir"]
     mask_dir = PATHS["merged_mask_dir"]
     swc_dir = PATHS["trace_swc_dir"] 
