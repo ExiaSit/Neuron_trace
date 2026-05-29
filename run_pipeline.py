@@ -252,6 +252,8 @@ def run_nnunet_folder(
     *,
     input_dir: Path,
     output_dir: Path,
+    temp_dir: Path,
+    temp_name: str,
     dataset_id: str,
     results_dir: str | Path,
     expected_output_stems: Sequence[str],
@@ -264,24 +266,37 @@ def run_nnunet_folder(
     if not input_dir.exists():
         raise FileNotFoundError(f"nnUNet input folder missing: {input_dir}")
 
+    job_temp_dir = temp_dir / temp_name
+    if job_temp_dir.exists():
+        shutil.rmtree(job_temp_dir)
+    job_temp_dir.mkdir(parents=True, exist_ok=True)
+
     runnable_stems: list[str] = []
     for stem in missing_outputs:
         input_path = input_dir / f"{stem}_0000.tif"
         if input_path.exists():
+            temp_input = job_temp_dir / f"{stem}_0000.tif"
+            try:
+                os.symlink(input_path, temp_input)
+            except OSError:
+                shutil.copy2(input_path, temp_input)
             runnable_stems.append(stem)
             continue
         reason = f"nnUNet input crop missing: {input_path}"
         print(f"[skip] {stem}: {reason}")
         log_pipeline_skip(pipeline_skip_log_path(), neuron_id_from_image_stem(stem), reason)
 
-    if runnable_stems:
-        output_dir.mkdir(parents=True, exist_ok=True)
-        set_nnunet_env(results_dir)
-        env = os.environ.copy()
-        env["CUDA_VISIBLE_DEVICES"] = str(NNUNET["gpu_id"])
-        cmd = build_nnunet_cmd(input_dir, output_dir, str(dataset_id))
-        print("[run] " + " ".join(cmd))
-        subprocess.run(cmd, check=True, env=env)
+    try:
+        if runnable_stems:
+            output_dir.mkdir(parents=True, exist_ok=True)
+            set_nnunet_env(results_dir)
+            env = os.environ.copy()
+            env["CUDA_VISIBLE_DEVICES"] = str(NNUNET["gpu_id"])
+            cmd = build_nnunet_cmd(job_temp_dir, output_dir, str(dataset_id))
+            print("[run] " + " ".join(cmd))
+            subprocess.run(cmd, check=True, env=env)
+    finally:
+        shutil.rmtree(job_temp_dir, ignore_errors=True)
 
     ready_stems = [stem for stem in expected_output_stems if (output_dir / f"{stem}.tif").exists()]
     for stem in runnable_stems:
@@ -297,6 +312,8 @@ def run_soma_infer_folder(neuron_ids: Sequence[int | str]) -> list[int | str]:
     ready_stems = run_nnunet_folder(
         input_dir=Path(PATHS["soma_crop_dir"]),
         output_dir=Path(PATHS["soma_seg_dir"]),
+        temp_dir=Path(PATHS["soma_temp_dir"]),
+        temp_name="soma_missing_inputs",
         dataset_id=str(NNUNET["soma_dataset_id"]),
         results_dir=NNUNET["soma_results"],
         expected_output_stems=[image_stem(neuron_id) for neuron_id in neuron_ids],

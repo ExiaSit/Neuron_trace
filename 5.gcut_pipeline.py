@@ -22,12 +22,15 @@ from pipeline_config import BASE_DIR, PATHS, GCUT
 # =========================================================================
 # 1. 动态加载本地 G-Cut 模块
 # =========================================================================
+GCUT_MODULE_DIR = PATHS.get("gcut") 
+GCUT_IMPORT_ERROR = None
 try:
-    sys.path.insert(0,PATHS["gcut"])  # 将 G-Cut 模块路径添加到 sys.path
+    sys.path.insert(0, str(GCUT_MODULE_DIR))  # 将 G-Cut 模块路径添加到 sys.path
     from neuron_segmentation import NeuronSegmentation
     GCUT_AVAILABLE = True
 except ImportError as e:
-    print(f"警告: 找不到原版 G-Cut 模块。请确保 gcut 文件夹在当前目录下。报错: {e}")
+    GCUT_IMPORT_ERROR = e
+    print(f"警告: 找不到原版 G-Cut 模块。请检查。报错: {e}")
     GCUT_AVAILABLE = False
 
 
@@ -557,6 +560,8 @@ def process_image_to_gcut(img_path, mask_path, swc_path, vis_output_dir,
                 log_messages.append(f"失败: G-Cut 内部处理报错 -> {e}")
         else:
             log_messages.append(f"跳过: 追踪文件 {swc_path} 不存在。仅生成预处理图。")
+    else:
+        log_messages.append(f"失败: G-Cut 模块不可用，, import_error={GCUT_IMPORT_ERROR}")
 
     combined_vis_path = Path(vis_output_dir) / f"{img_path.stem}_comprehensive_vis.png"
     # 注意这里将 final_coords (NMS前的候选点) 和 soma_coords (NMS后的点) 都传进去了
@@ -639,7 +644,6 @@ def worker_task(args):
 if __name__ == "__main__":
     base_dir = BASE_DIR
     # base_dir = "/data/disk2/B4.5"
-    print(PATHS["gcut"])
     img_dir = PATHS["image_1um_dir"]
     mask_dir = PATHS["merged_mask_dir"]
     swc_dir = PATHS["trace_swc_dir"] 
