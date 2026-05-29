@@ -16,7 +16,7 @@ import subprocess
 import shutil
 import math
 from multiprocessing import Process
-from pipeline_config import BASE_DIR
+from pipeline_config import BASE_DIR,NNUNET
 
 
 # ================= Configure =================
@@ -36,7 +36,7 @@ skipped_neurons_log_path = os.path.join(base_path, "skipped_neurons.txt")
 
 os.environ['nnUNet_raw'] = "Wait_No_Need"
 os.environ['nnUNet_preprocessed'] = "Wait_No_Need"
-os.environ['nnUNet_results'] = "/data/disk/nnUNet_local/nnUNet_results"
+os.environ['nnUNet_results'] = NNUNET["soma_results"]
 
 AVAILABLE_GPUS = [0] 
 NUM_INFER_WORKERS = 20 

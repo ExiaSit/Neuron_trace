@@ -5,7 +5,7 @@ import shutil
 import math
 from multiprocessing import Process
 from tqdm import tqdm
-from pipeline_config import BASE_DIR
+from pipeline_config import BASE_DIR,NNUNET
 
 # ================= 配置区 =================
 basic_path = BASE_DIR
@@ -21,7 +21,7 @@ AVAILABLE_GPUS = [0]
 # 模型路径
 os.environ['nnUNet_raw'] = "Wait_No_Need"
 os.environ['nnUNet_preprocessed'] = "Wait_No_Need"
-os.environ['nnUNet_results'] = "/data/disk3/nnUNet_base/nnUNet_results"
+os.environ['nnUNet_results'] = NNUNET["neurite_results"]
 
 # 并发数
 # 注意：10个并发意味着每张显卡会同时跑 5 个模型 (10/2=5)。
