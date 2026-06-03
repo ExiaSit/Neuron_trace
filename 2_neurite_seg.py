@@ -27,7 +27,7 @@ os.environ['nnUNet_results'] = NNUNET["neurite_results"]
 # 注意：10个并发意味着每张显卡会同时跑 5 个模型 (10/2=5)。
 # 如果显存不够（OOM），请适当降低这个数字（例如改为 2 或 4）
 NUM_WORKERS = 1
-BATCH_SIZE = 10 
+BATCH_SIZE = 40 
 # =========================================
 
 def get_processed_ids(output_dir):
@@ -50,7 +50,7 @@ def run_nnunet(input_folder, output_folder, worker_id, gpu_id):
         "nnUNetv2_predict",
         "-i", input_folder,
         "-o", output_folder,
-        "-d", "170",
+        "-d", NNUNET["neurite_dataset_id"],
         "-c", "3d_fullres",
         "-f", "0",
         # "--save_probabilities",
