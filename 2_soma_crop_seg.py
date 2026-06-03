@@ -16,7 +16,7 @@ import subprocess
 import shutil
 import math
 from multiprocessing import Process
-from pipeline_config import BASE_DIR,NNUNET
+from pipeline_config import BASE_DIR,NNUNET,PATHS
 
 
 # ================= Configure =================
@@ -25,21 +25,21 @@ TARGET_BLOCK_SIZE = (128, 128, 128)
 SAVE_MIP_VISUALIZATION = False
 
 base_path = BASE_DIR
-img_1um_dir = os.path.join(base_path, "img")
-soma_crop_dir = os.path.join(base_path, "soma_img")
-soma_seg_dir = os.path.join(base_path, "soma_seg")
+img_1um_dir = PATHS["image_1um_dir"]
+soma_crop_dir = PATHS["soma_crop_dir"]
+soma_seg_dir = PATHS["soma_seg_dir"]
 os.makedirs(soma_crop_dir, exist_ok=True)
 os.makedirs(soma_seg_dir, exist_ok=True)
 
-base_temp_dir = os.path.join(base_path, "soma_temp_batch_input")
-skipped_neurons_log_path = os.path.join(base_path, "skipped_neurons.txt")
+base_temp_dir = PATHS["soma_temp_dir"]
+skipped_neurons_log_path = PATHS["soma_skipped_log"]
 
 os.environ['nnUNet_raw'] = "Wait_No_Need"
 os.environ['nnUNet_preprocessed'] = "Wait_No_Need"
 os.environ['nnUNet_results'] = NNUNET["soma_results"]
 
 AVAILABLE_GPUS = [0] 
-NUM_INFER_WORKERS = 20 
+NUM_INFER_WORKERS = 10 
 INFER_BATCH_SIZE = 200 
 # =========================================
 

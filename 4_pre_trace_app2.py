@@ -22,22 +22,22 @@ from pipeline_config import BASE_DIR, PATHS
 # ================= 配置区域 =================
 # 1. Mask 路径
 base_dir = BASE_DIR
-seg_dir = os.path.join(base_dir, "mask")
+seg_dir = PATHS["merged_mask_dir"]
 
 # 2. 原图路径
-raw_img_dir = os.path.join(base_dir, "img")
+raw_img_dir = PATHS["image_1um_dir"]
 
 # 3. 输出路径
-output_dir = os.path.join(base_dir, "trace_app2")
+output_dir = PATHS["trace_output_dir"]
 
-swc_dir = os.path.join(output_dir, "down_sampled_swcs_app2") 
-marker_dir = os.path.join(output_dir, "markers")
+swc_dir =  PATHS["trace_swc_dir"]
+marker_dir =  PATHS["trace_marker_dir"]
 
 # 日志文件
-log_file = os.path.join(output_dir, "process_log.txt")
-timeout_record = os.path.join(output_dir, "record_timeout_5min.txt")
-error_record = os.path.join(output_dir, "record_failed_5min.txt")
-cost_time_record = os.path.join(output_dir, "record_cost_time_5min.txt")
+log_file =  PATHS["pipeline_skip_log"]
+timeout_record =  PATHS["trace_timeout_log"]
+error_record =  PATHS["trace_error_log"]
+cost_time_record =  PATHS["trace_cost_log"]
 
 # Vaa3D 程序路径
 V3D_PATH = PATHS["vaa3d_path"]

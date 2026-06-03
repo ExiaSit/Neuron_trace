@@ -664,7 +664,7 @@ if __name__ == "__main__":
     # 读取 Meta 文件
     meta_file_path = PATHS["meta_file"]
     print("Loading Metadata...")
-    meta_df = pd.read_csv(meta_file_path, index_col='cell_id', low_memory=False)
+    meta_df = pd.read_csv(meta_file_path, encoding="gbk",index_col='cell_id', low_memory=False)
     
     TARGET_PERCENTILE = GCUT["target_percentile"] 
     GSDT_THRESHOLD_X = GCUT["gsdt_threshold_x"]
