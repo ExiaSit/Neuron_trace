@@ -1,0 +1,23 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python build / packaging
+build/
+dist/
+*.egg-info/
+
+# Virtual env
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+# Local machine-specific paths and runtime settings
+pipeline_config.py
+neuroutils/config/settings.py
+__pycache__/
+*.pyc

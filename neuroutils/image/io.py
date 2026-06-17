@@ -20,7 +20,7 @@ def load_image(filename, normalize=True, out_dtype="uint8"):
     elif(filename.endswith('.v3dpbd')):
         pbd = PBD()
         image = pbd.load(filename)
-        tifffile.imwrite('/data/disk/C6.0/app_test/mip.tif', image)  # Save MIP for quick check
+        # tifffile.imwrite('/data/disk/C6.0/app_test/mip.tif', image)  # Save MIP for quick check
         if image.ndim == 4:
             image = np.sum(image.astype(np.float32), axis=0)
     elif(filename.endswith('.v3draw')):

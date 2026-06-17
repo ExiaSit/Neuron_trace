@@ -5,6 +5,8 @@ import tifffile
 import cv2
 from collections import defaultdict
 from tqdm import tqdm
+from pipeline_config import BASE_DIR, PATHS, NEURON_IDS
+
 
 # ================= 图像处理辅助函数 =================
 
@@ -101,7 +103,7 @@ def restore_crops_to_original(
             continue
         original_path = os.path.join(original_dir, parent_name)
         if not os.path.exists(original_path):
-            print(f"\nError: 找不到原图 {parent_name}，跳过。")
+            print(f"\nError: 找不到原图 {original_path}，跳过。")
             continue
             
         with tifffile.TiffFile(original_path) as tif:
@@ -150,11 +152,11 @@ def name_parser(crop_filename):
     return base_id + ".tif"
 
 if __name__ == "__main__":
-    base_dir = "/data/disk/C6.0/app_test"
-    Neurite_seg_DIR = os.path.join(base_dir,"1um_neurite_seg_0424")
-    JSON_DIR = os.path.join(base_dir,"soma_img")
-    Soma_SEG_DIR = os.path.join(base_dir,"soma_seg")
-    OUTPUT_DIR = os.path.join(base_dir,"mask_new_version_0424")
+    base_dir = BASE_DIR
+    Neurite_seg_DIR = PATHS["neurite_seg_dir"]
+    JSON_DIR = PATHS["soma_crop_dir"]
+    Soma_SEG_DIR = PATHS["soma_seg_dir"]
+    OUTPUT_DIR = PATHS["merged_mask_dir"]
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     
     SAVE_PREVIEW_IMAGES = False 

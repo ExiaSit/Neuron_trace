@@ -5,12 +5,13 @@ import shutil
 import math
 from multiprocessing import Process
 from tqdm import tqdm
+from pipeline_config import BASE_DIR,NNUNET
 
 # ================= 配置区 =================
-basic_path = "/data/disk/C6.0/app_test/"
+basic_path = BASE_DIR
 # basic_path = "/data/disk3/zll/origin"
 raw_input_dir = os.path.join(basic_path, 'img')
-final_output_dir = os.path.join(basic_path, '1um_neurite_seg_0424')
+final_output_dir = os.path.join(basic_path, '1um_neurite_seg')
 base_temp_dir = os.path.join(basic_path, 'temp_batch_input') 
 
 # [修改点 1]：定义可用的物理 GPU 列表
@@ -20,13 +21,13 @@ AVAILABLE_GPUS = [0]
 # 模型路径
 os.environ['nnUNet_raw'] = "Wait_No_Need"
 os.environ['nnUNet_preprocessed'] = "Wait_No_Need"
-os.environ['nnUNet_results'] = "/data/disk3/nnUNet_base/nnUNet_results"
+os.environ['nnUNet_results'] = NNUNET["neurite_results"]
 
 # 并发数
 # 注意：10个并发意味着每张显卡会同时跑 5 个模型 (10/2=5)。
 # 如果显存不够（OOM），请适当降低这个数字（例如改为 2 或 4）
 NUM_WORKERS = 1
-BATCH_SIZE = 10 
+BATCH_SIZE = 40 
 # =========================================
 
 def get_processed_ids(output_dir):
@@ -49,7 +50,7 @@ def run_nnunet(input_folder, output_folder, worker_id, gpu_id):
         "nnUNetv2_predict",
         "-i", input_folder,
         "-o", output_folder,
-        "-d", "170",
+        "-d", NNUNET["neurite_dataset_id"],
         "-c", "3d_fullres",
         "-f", "0",
         # "--save_probabilities",

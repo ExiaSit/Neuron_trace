@@ -5,6 +5,7 @@ import scipy.ndimage as ndimage
 import sys
 import os
 import json
+import shutil
 import pandas as pd
 
 # 必须在导入 pyplot 之前设置为 'Agg'，防止多进程画图时 GUI 后端崩溃
@@ -15,23 +16,21 @@ import matplotlib.patches as patches  # 引入用于绘制圆圈的模块
 
 import concurrent.futures
 from tqdm import tqdm
+from pipeline_config import BASE_DIR, PATHS, GCUT
 
 
 # =========================================================================
 # 1. 动态加载本地 G-Cut 模块
 # =========================================================================
-current_dir = Path(__file__).parent.absolute()
-gcut_python_dir = current_dir / "gcut" / "python"
-
-if str(gcut_python_dir) not in sys.path:
-    sys.path.insert(0, str(gcut_python_dir))
-
+GCUT_MODULE_DIR = PATHS.get("gcut") 
+GCUT_IMPORT_ERROR = None
 try:
-    sys.path.insert(0,"/home/pzy/Neuron_Trace/gcut/python")
+    sys.path.insert(0, str(GCUT_MODULE_DIR))  # 将 G-Cut 模块路径添加到 sys.path
     from neuron_segmentation import NeuronSegmentation
     GCUT_AVAILABLE = True
 except ImportError as e:
-    print(f"警告: 找不到原版 G-Cut 模块。请确保 gcut 文件夹在当前目录下。报错: {e}")
+    GCUT_IMPORT_ERROR = e
+    print(f"警告: 找不到原版 G-Cut 模块。请检查。报错: {e}")
     GCUT_AVAILABLE = False
 
 
@@ -56,6 +55,54 @@ def write_swc(tree, swc_file):
         for node in tree:
             idx, type_, x, y, z, r, p = node
             fp.write(f'{int(idx)} {int(type_)} {float(x):.5f} {float(y):.5f} {float(z):.5f} {float(r):.1f} {int(p)}\n')
+
+
+def swc_has_nodes(swc_file):
+    swc_file = Path(swc_file)
+    if not swc_file.exists() or swc_file.stat().st_size == 0:
+        return False
+    with open(swc_file, 'r', encoding='utf-8', errors='ignore') as fp:
+        for line in fp:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            if len(line.split()) >= 7:
+                return True
+    return False
+
+
+def selected_swc_path(result_dir, img_path):
+    return Path(result_dir) / f"{Path(img_path).stem.replace('_0000', '')}.swc"
+
+
+def find_gcut_target_swc(vis_dir, img_path):
+    stem = Path(img_path).stem
+    base_stem = stem.replace('_0000', '')
+    vis_dir = Path(vis_dir)
+    patterns = (
+        f"{stem}_gcut_soma_*_TARGET.swc",
+        f"{base_stem}_gcut_soma_*_TARGET.swc",
+        f"{stem}_gcut_soma_*.swc",
+        f"{base_stem}_gcut_soma_*.swc",
+    )
+    for pattern in patterns:
+        candidates = sorted(vis_dir.glob(pattern))
+        for candidate in candidates:
+            if swc_has_nodes(candidate):
+                return candidate
+    return None
+
+
+def prepare_selected_swc(result_dir, img_path, vis_dir):
+    selected_path = selected_swc_path(result_dir, img_path)
+    selected_path.parent.mkdir(parents=True, exist_ok=True)
+    if swc_has_nodes(selected_path):
+        return selected_path
+    target_swc = find_gcut_target_swc(vis_dir, img_path)
+    if target_swc is None:
+        return None
+    shutil.copy2(target_swc, selected_path)
+    return selected_path
 
 
 # =========================================================================
@@ -159,7 +206,7 @@ def get_binarization_threshold(img, mask, percentile_value=50.0):
 # =========================================================================
 def save_comprehensive_summary(img, binary_img, dist_transform, gsdt_mask, global_soma_mask, pre_nms_coords, post_nms_coords, 
                                app2_tree, split_trees, target_soma_id, 
-                               save_path, nms_radius=20.0, title_prefix=""):
+                               save_path, nms_radius=20.0, title_prefix="", individual_output_dir=None):
     """
     生成 2x4 的网格图。
     排列顺序呈左开口的U形:
@@ -288,6 +335,26 @@ def save_comprehensive_summary(img, binary_img, dist_transform, gsdt_mask, globa
 
     plt.tight_layout()
     plt.savefig(save_path, dpi=200)
+
+    if individual_output_dir is not None:
+        individual_output_dir = Path(individual_output_dir)
+        individual_output_dir.mkdir(parents=True, exist_ok=True)
+        panel_names = {
+            0: "01_original_image_mip",
+            1: "02_binarization_mask",
+            2: "03_gsdt_distance_map",
+            3: "04_pre_nms_candidates",
+            7: "05_post_nms_centers",
+            6: "06_original_app2_trace",
+            5: "07_gcut_segmented_all",
+            4: "08_gcut_target_neuron",
+        }
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        for idx, name in panel_names.items():
+            bbox = ax[idx].get_tightbbox(renderer).transformed(fig.dpi_scale_trans.inverted())
+            fig.savefig(individual_output_dir / f"{name}.png", dpi=300, bbox_inches=bbox.expanded(1.08, 1.15))
+
     plt.close(fig)
 
 
@@ -425,6 +492,8 @@ def process_image_to_gcut(img_path, mask_path, swc_path, vis_output_dir,
         if Path(swc_path).exists():
             try:
                 tree_orig = parse_swc(swc_path)
+                if len(tree_orig) == 0:
+                    return None, f"跳过: App2 SWC 为空或没有有效节点: {swc_path}"
                 tree_orig, removed_count = remove_fake_roots(tree_orig)
                 if removed_count > 0:
                     log_messages.append(f"清理了{img_path} 中{removed_count} 个无子节点的假根节点。")
@@ -491,13 +560,16 @@ def process_image_to_gcut(img_path, mask_path, swc_path, vis_output_dir,
                 log_messages.append(f"失败: G-Cut 内部处理报错 -> {e}")
         else:
             log_messages.append(f"跳过: 追踪文件 {swc_path} 不存在。仅生成预处理图。")
+    else:
+        log_messages.append(f"失败: G-Cut 模块不可用，, import_error={GCUT_IMPORT_ERROR}")
 
     combined_vis_path = Path(vis_output_dir) / f"{img_path.stem}_comprehensive_vis.png"
     # 注意这里将 final_coords (NMS前的候选点) 和 soma_coords (NMS后的点) 都传进去了
     save_comprehensive_summary(
         img, binary_img, dist_transform, gsdt_mask, global_soma_mask, final_coords, soma_coords,
         app2_tree, split_trees, target_soma_id,
-        combined_vis_path, nms_radius=NMS_RADIUS, title_prefix=img_path.name
+        combined_vis_path, nms_radius=NMS_RADIUS, title_prefix=img_path.name,
+        individual_output_dir=None
     )
 
     return (intensity_threshold, soma_coords), "; ".join(log_messages)
@@ -511,8 +583,17 @@ def extract_id(filename):
 
 def worker_task(args):
     """多进程的任务包装器"""
-    img_path, mask_path, swc_path, vis_dir, pct_val, gsdt_thr, error_log_path, soma_json_path, soma_mask_path, meta_df = args
+    if len(args) == 11:
+        img_path, mask_path, swc_path, vis_dir, pct_val, gsdt_thr, error_log_path, soma_json_path, soma_mask_path, meta_df, result_dir = args
+    else:
+        img_path, mask_path, swc_path, vis_dir, pct_val, gsdt_thr, error_log_path, soma_json_path, soma_mask_path, meta_df = args
+        result_dir = None
     try:
+        if result_dir is not None:
+            selected_path = selected_swc_path(result_dir, img_path)
+            if swc_has_nodes(selected_path):
+                return img_path.name, (0, []), f"跳过: selected_for_pruning 已存在 {selected_path}"
+
         neuron_id = int(extract_id(img_path.name))
         
         # 直接从传入的 DataFrame 获取数据
@@ -534,6 +615,13 @@ def worker_task(args):
             csv_target_coord, pct_val, gsdt_thr,
             soma_json_path, soma_mask_path
         )
+        if result_dir is not None and res is not None:
+            selected_path = prepare_selected_swc(result_dir, img_path, vis_dir)
+            if selected_path is None:
+                log_msg = f"{log_msg}; 失败: 未找到可用于 pruning 的 G-Cut SWC"
+                res = None
+            else:
+                log_msg = f"{log_msg}; selected_for_pruning: {selected_path}"
         
         if "跳过" in log_msg or "失败" in log_msg or "清理了" in log_msg:
             with open(error_log_path, "a", encoding="utf-8") as f:
@@ -554,30 +642,32 @@ def worker_task(args):
 # 6. 多进程调度与执行主程序
 # =========================================================================
 if __name__ == "__main__":
-    base_dir = "/data/disk3/C6.0/app_test"
+    base_dir = BASE_DIR
     # base_dir = "/data/disk2/B4.5"
-    img_dir = Path(base_dir) / "img"
-    mask_dir = Path(base_dir) / "mask"
-    swc_dir = Path(base_dir) / "trace_app2/down_sampled_swcs_app2" 
-    vis_dir = Path(base_dir) / "gcut_output" 
+    img_dir = PATHS["image_1um_dir"]
+    mask_dir = PATHS["merged_mask_dir"]
+    swc_dir = PATHS["trace_swc_dir"] 
+    vis_dir = PATHS["gcut_output_dir"]
+    result_dir = PATHS["gcut_selected_swc_dir"] 
     
-    soma_img_dir = Path(base_dir) / "soma_img"
-    soma_mask_dir = Path(base_dir) / "soma_seg"
+    soma_img_dir = PATHS["soma_crop_dir"]
+    soma_mask_dir = PATHS["soma_seg_dir"]
     
     vis_dir.mkdir(parents=True, exist_ok=True)
+    result_dir.mkdir(parents=True, exist_ok=True)
     
-    error_log_path = vis_dir / "error_log.txt"
+    error_log_path = PATHS["gcut_error_log"]
     with open(error_log_path, "w", encoding="utf-8") as f:
         f.write("=== G-Cut Processing Exception Log ===\n")
         f.flush()
         
     # 读取 Meta 文件
-    meta_file_path = '/home/pzy/Neuron_Trace/meta_260205.csv'
+    meta_file_path = PATHS["meta_file"]
     print("Loading Metadata...")
-    meta_df = pd.read_csv(meta_file_path, index_col='cell_id', low_memory=False)
+    meta_df = pd.read_csv(meta_file_path, encoding="gbk",index_col='cell_id', low_memory=False)
     
-    TARGET_PERCENTILE = 55.0 
-    GSDT_THRESHOLD_X = 5.0    
+    TARGET_PERCENTILE = GCUT["target_percentile"] 
+    GSDT_THRESHOLD_X = GCUT["gsdt_threshold_x"]
     
     specific_task_ids = list()
     
@@ -599,9 +689,13 @@ if __name__ == "__main__":
     
     for original_img_file in files_to_process:
         temp_stem = original_img_file.stem.replace("_0000", "")
-        existing_targets = list(vis_dir.glob(f"{temp_stem}.swc"))
-        print(f"检查文件: {original_img_file}")
-        if len(existing_targets) > 0:
+        selected_path = result_dir / f"{temp_stem}.swc"
+        if swc_has_nodes(selected_path):
+            print(f"{original_img_file} 已经处理: {selected_path}")
+            continue
+        prepared_selected = prepare_selected_swc(result_dir, original_img_file, vis_dir)
+        if prepared_selected is not None:
+            print(f"{original_img_file} 已有 G-Cut 结果，已补齐 selected_for_pruning: {prepared_selected}")
             continue
             
         mask_file = mask_dir / original_img_file.name.replace("_0000.tif", ".tif")
@@ -617,7 +711,7 @@ if __name__ == "__main__":
         tasks.append((
             original_img_file, mask_file, swc_file, vis_dir, 
             TARGET_PERCENTILE, GSDT_THRESHOLD_X, error_log_path,
-            soma_json_path, soma_mask_path, meta_df
+            soma_json_path, soma_mask_path, meta_df, result_dir
         ))
 
     results = {}
