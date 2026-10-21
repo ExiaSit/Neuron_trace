@@ -1,0 +1,119 @@
+{
+  "version": "v0.82",
+  "base": "/data/disk/Neuron_tracing_method/v0.81",
+  "gcut_source": "/data/disk/Neuron_tracing_method/0.84_test",
+  "mask_repair": false,
+  "files": {
+    "algorithms/__init__.py": {
+      "source": "/data/disk/Neuron_tracing_method/0.84_test/algorithms/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "ported_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "algorithms/tracing/__init__.py": {
+      "source": "/data/disk/Neuron_tracing_method/0.84_test/algorithms/tracing/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "ported_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "algorithms/tracing/gcut_stage.py": {
+      "source": "/data/disk/Neuron_tracing_method/0.84_test/algorithms/tracing/gcut_stage.py",
+      "sha256": "688946dae9e60783be1149ed5b704c6a79453c7b14bcc43537b01ed3ee311665",
+      "ported_sha256": "d34873691b5a7a619afeb5a3934f2f63a19b9d51b1809f46b9155f083e761d96"
+    },
+    "algorithms/tracing/gcut_adapter.py": {
+      "source": "/data/disk/Neuron_tracing_method/0.84_test/algorithms/tracing/gcut_adapter.py",
+      "sha256": "b1b956e759ab641070ca0066ac0f60987f5e78a2af83e02541af819871d6c237",
+      "ported_sha256": "780fee3d340357b253b7756edebcb1c189695e4dc9845e48aeb8f36b783f9ccd"
+    },
+    "algorithms/tracing/candidate_evidence.py": {
+      "source": "/data/disk/Neuron_tracing_method/0.84_test/algorithms/tracing/candidate_evidence.py",
+      "sha256": "417d07a7f00b1689584273339a909bdaa1989aebb47d6f68ae7fe9d56c560f03",
+      "ported_sha256": "417d07a7f00b1689584273339a909bdaa1989aebb47d6f68ae7fe9d56c560f03"
+    },
+    "algorithms/tracing/nms_audit.py": {
+      "source": "/data/disk/Neuron_tracing_method/0.84_test/algorithms/tracing/nms_audit.py",
+      "sha256": "e66a81829aa975cdf392e2923e807bf8070f54297c4cdc7ac160269277281f80",
+      "ported_sha256": "e66a81829aa975cdf392e2923e807bf8070f54297c4cdc7ac160269277281f80"
+    },
+    "algorithms/tracing/signal_support.py": {
+      "source": "/data/disk/Neuron_tracing_method/0.84_test/algorithms/tracing/signal_support.py",
+      "sha256": "44158c3c485bb83598764f81145e1fb30d8f6f8993d4fb88e24f3b0aacbe8145",
+      "ported_sha256": "44158c3c485bb83598764f81145e1fb30d8f6f8993d4fb88e24f3b0aacbe8145"
+    },
+    "algorithms/tracing/soma_signal_groups.py": {
+      "source": "/data/disk/Neuron_tracing_method/0.84_test/algorithms/tracing/soma_signal_groups.py",
+      "sha256": "d80bb55b0825150514a3d67b9178dea57f244ef391e0cbec160bd60aad633b3d",
+      "ported_sha256": "d80bb55b0825150514a3d67b9178dea57f244ef391e0cbec160bd60aad633b3d"
+    },
+    "algorithms/tracing/soma_ownership.py": {
+      "source": "/data/disk/Neuron_tracing_method/0.84_test/algorithms/tracing/soma_ownership.py",
+      "sha256": "a745b86624c3f5b95b37b125c55cc31406443971b20bebdba3bd8dc03c446a4f",
+      "ported_sha256": "a745b86624c3f5b95b37b125c55cc31406443971b20bebdba3bd8dc03c446a4f"
+    },
+    "algorithms/tracing/app2_gsdt.py": {
+      "source": "/data/disk/Neuron_tracing_method/0.84_test/algorithms/tracing/app2_gsdt.py",
+      "sha256": "3f2c25f0b33ccaa688166be2acbc1d325ab8f36c90f7161085ed8727fa799103",
+      "ported_sha256": "3f2c25f0b33ccaa688166be2acbc1d325ab8f36c90f7161085ed8727fa799103"
+    },
+    "utils/__init__.py": {
+      "source": "/data/disk/Neuron_tracing_method/0.84_test/utils/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "ported_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "utils/gpu_ndimage.py": {
+      "source": "/data/disk/Neuron_tracing_method/0.84_test/utils/gpu_ndimage.py",
+      "sha256": "9cefb983c7c3de226900d5bc805366ff0ada3a6968530b36a3135d5b784ae7bc",
+      "ported_sha256": "9cefb983c7c3de226900d5bc805366ff0ada3a6968530b36a3135d5b784ae7bc"
+    },
+    "visualization/__init__.py": {
+      "source": "/data/disk/Neuron_tracing_method/0.84_test/visualization/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "ported_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "visualization/gcut_summary.py": {
+      "source": "/data/disk/Neuron_tracing_method/0.84_test/visualization/gcut_summary.py",
+      "sha256": "2b5a25f077727e8927a58006be5b45ad05e743f73eb5c5e77ab55509f0c12193",
+      "ported_sha256": "7d12835139fb4d1a41ddc6538fa2af47b621cc2e326fda127d79c98633114322"
+    },
+    "helpers.soma_volumes": {
+      "source": "/data/disk/Neuron_tracing_method/0.84_test/algorithms/mask_repair/soma_completion.py",
+      "sha256": "005b152cb359a4d587cd0c276e5433bf924f82a5336ae29c6c0faef5922165f0"
+    },
+    "helpers.target_body": {
+      "source": "/data/disk/Neuron_tracing_method/0.84_test/algorithms/mask_repair/guarded_continuation.py",
+      "sha256": "b9c98c7f29eca3333f6172177fe8b507a96b41af9980602ca7aa98c414c99d57"
+    }
+  },
+  "base_git_commit": "4862a2f",
+  "branch": "v0.82",
+  "unmodified_algorithms": {
+    "1_rescale_cpu.py": {
+      "ast_identical_to_v081": true,
+      "source_sha256": "b631c29a0f69c4f6415bf120ddfb052ecd2f0a6f98a1fe11f67058f1baa56d6f"
+    },
+    "2_soma_crop_seg.py": {
+      "ast_identical_to_v081": true,
+      "source_sha256": "de559f7a3f5ffc95831f457b4125f1cb16fac6f0bc9586f969cc54a7ac7969d0"
+    },
+    "2_neurite_seg.py": {
+      "ast_identical_to_v081": true,
+      "source_sha256": "ac2317fac486e864f00c9c8008af01d71b4336e1eb3471ea7659254058eee597"
+    },
+    "3.concat_neurite_soma.py": {
+      "ast_identical_to_v081": true,
+      "source_sha256": "a3e636d67df293b51842792b4aa87ee49e7ede07dbaa315caa872986652e0e24"
+    },
+    "4_pre_trace_app2.py": {
+      "ast_identical_to_v081": true,
+      "source_sha256": "e08ff7ea864eeedacb0426e537c40d8c648d7d5a086fb0c2414594a969b85c02"
+    },
+    "5.5_resample_app2_swc.py": {
+      "ast_identical_to_v081": true,
+      "source_sha256": "26286bdfc8d1a4021c4d11abfe936ea5014ebbff14d5ed284be0d229bc1da43d"
+    },
+    "6_gcut_pruning_no_radius_jump_no_long_edge_copy.py": {
+      "ast_identical_to_v081": true,
+      "source_sha256": "20b85f59e28a05aa4e10881cd5107cdb726279989a5cf7ac34385d142652a98d"
+    }
+  },
+  "geometry_module_sha256": "5dce86dd59aa9d01c18c9561e887ae0fb5183f44be65f10884badd8a6278ace7"
+}

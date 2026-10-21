@@ -1,6 +1,22 @@
-# Neuron Trace v0.81
+# Neuron Trace v0.82
 
 从原始三维神经元图像生成神经元重建 SWC 的处理流程。项目按神经元 ID 读取图像与胞体元数据，依次进行 1 µm 重采样、胞体与神经突分割、mask 合并、APP2 追踪、G-Cut 分离、SWC 重采样和剪枝，同时保存各阶段结果与可视化图。
+
+## 本版修改
+
+以本地 `v0.81` 和 Git 的 `main`（`4862a2f`）为基础，移植 `0.84_test` 当前修改后的 G-Cut。
+分支名为 `v0.82`。分割、mask 合并、APP2、SWC 重采样和剪枝继续使用 0.81 的算法。
+流水线直接将合并后的 mask 交给 APP2/G-Cut，不包含 mask 补全或重连阶段。
+
+G-Cut 默认使用 APP2 原生三维 GSDT 选择厚核心内的候选峰值，保留 EDT 的 5 µm
+厚度门槛与半径评分，并包含胞体证据过滤、6 µm 距离 NMS、三维信号合并、
+目标胞体区域归属和保留稀疏 APP2 末梢的预处理修改。
+G-Cut 需要的胞体几何测量单独放在 `algorithms/tracing/soma_geometry.py`，只用于分析候选，
+不修改或保存输入 mask。其函数从当前版本原样提取。
+
+每个 G-Cut 样本使用独立子进程，以隔离批处理中的候选参数和 GPU 环境设置。
+本版的配置环境变量为 `NEURON_V082_CONFIG`，命令行 `--config` 会自动设置它。
+新版 G-Cut、GSDT 原生源码和辅助模块都位于本版目录，运行时不依赖 `0.84_test` 目录。
 
 ## 环境与依赖
 
@@ -8,19 +24,21 @@
 - Python 库：NumPy、pandas、SciPy、scikit-image、tifffile、matplotlib、OpenCV、joblib、tqdm、NetworkX、connected-components-3d、edt、v3dpy。
 - nnUNet v2 及其 PyTorch 环境，默认使用 CUDA 推理。
 - nnUNet 模型：Dataset206 胞体分割、Dataset169 神经突分割，默认 `3d_fullres`、fold `0`。
+- G++（首次编译 APP2 GSDT）；CuPy/CUDA（候选生成配置为 `cuda` 时需要）。
 - Vaa3D 3.601 的 APP2 插件，以及用于 SWC 重采样、排序的 Vaa3D-x。
 - `xvfb-run`，用于运行 Vaa3D 命令行任务。
 
-运行所需的本地依赖源码按下面的布局准备。`vendor/` 由 `.gitignore` 排除，单独部署：
+运行所需的本地依赖源码按下面的布局准备。前三项外部依赖由 `.gitignore` 排除，单独部署；`app2_gsdt` 源码随本版保存：
 
 ```text
 vendor/
 ├── pylib/          # swc_handler、morph_topo 等形态学工具
 ├── TraceFlow/      # core/io、core/visualization 等模块
-└── gcut/           # neuron_segmentation 及 G-Cut 实现和资源
+├── gcut/           # neuron_segmentation 及 G-Cut 实现和资源
+└── app2_gsdt/      # 本版跟踪的 APP2 GSDT 原始头文件与 C ABI 包装
 ```
 
-程序相对于项目目录定位这三个依赖目录，可从任意工作目录启动。
+程序相对于项目目录定位这前三个依赖目录，可从任意工作目录启动。
 
 ## 输入数据
 
@@ -119,7 +137,24 @@ python run_pipeline.py --config config.json --mode stage-batch \
 
 只运行部分阶段时，先在同一输出目录准备好它们需要的上游产物。
 
-JSON 的 `soma` 可配置 `target_block_size` 和 `save_mip_visualization`；`gcut` 可配置 `target_percentile` 和 `gsdt_threshold_x`；`pruning` 可配置剪枝参数。各项默认值见 `pipeline_config.py`。
+JSON 的 `soma` 可配置 `target_block_size` 和 `save_mip_visualization`；`pruning` 可配置剪枝参数。
+`gcut` 配置如下，默认使用 GSDT，且只在大体积 EDT/滤波中启用 GPU：
+
+```json
+{
+  "gcut": {
+    "target_percentile": 55.0,
+    "gsdt_threshold_x": 5.0,
+    "candidate_method": "app2_gsdt",
+    "candidate_backend": "cuda",
+    "candidate_evidence": {"enabled": true}
+  }
+}
+```
+
+GSDT 本身在原生 CPU 中运行；无 CUDA 时可将 `candidate_backend` 改为 `cpu`。
+`candidate_method: "edt"` 只用于显式对照。`gsdt_threshold_x` 是兼容旧配置的键名，
+实际仍表示几何 EDT 的厚度门槛，单位 µm。各项默认值见 `pipeline_config.py`。
 
 ## 输出目录
 
@@ -144,7 +179,17 @@ output_root/
     └── pruning_mips/                    # 剪枝过程总图与原因记录
 ```
 
-G-Cut 分离过程总图保存在 `gcut_output/`。阶段之间使用 `image_<id>` 文件名对应同一神经元，图像通道输入带 `_0000` 后缀。
+G-Cut 分离过程总图和候选审计保存在 `gcut_output/<id>/`：
+
+- `overview.png`、`gcut_target.swc`：总览图及目标 SWC。
+- `before_evidence_points.swc`、`rejected_candidates.swc`：证据过滤前及被拒绝的点。
+- `pre_nms_points.swc`、`distance_nms_only_points.swc`、`post_nms_points.swc`：三个候选阶段。
+- `candidate-generation.json`、`candidate-evidence.json`、`nms-audit.json`、`soma-merge-audit.json`：候选依据。
+- `target-soma-region.tif`：用于候选合并的目标胞体内部区域，与原图同坐标。
+- `input_mask.tif`、`original_image.tif`：输入快捷链接。
+- `worker.log`、`worker-spec.json`、`worker-result.json`、`gcut-timing.json`：运行记录。
+
+候选 SWC 使用原图 XYZ 坐标，独立点的显示半径为 2 µm。控制台输出 G-Cut 各子阶段耗时。阶段之间使用 `image_<id>` 文件名对应同一神经元，图像通道输入带 `_0000` 后缀。
 
 ## 坐标与续跑
 
@@ -155,7 +200,13 @@ G-Cut 分离过程总图保存在 `gcut_output/`。阶段之间使用 `image_<id
 ## 回归检查
 
 ```bash
-python tests/test_runtime_adapters.py
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python -m unittest discover -s tests -v
 ```
 
 检查内容包括裁剪坐标顺序、APP2 坐标转换、剪枝函数传参、失败状态传播及与当前工作目录无关的路径解析。
+
+
+42 项相关检查已通过；15214、107046、105612、16963 的移植对照中，候选坐标/分数、
+过滤/NMS/合并审计、所有 G-Cut 分离 SWC 和胞体区域均与相同输入下的当前版本一致。
+另以 15214 的原始 mask 实跑 APP2 → G-Cut → 重采样 → 0.81 剪枝，完成全部阶段。
+详细范围见 `VALIDATION.md`。移植来源和哈希见 `PORT_PROVENANCE.json`。

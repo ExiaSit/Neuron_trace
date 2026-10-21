@@ -16,5 +16,14 @@
     "neurite_results": "/path/to/nnUNet_results",
     "gpu_id": 0,
     "device": "cuda"
+  },
+  "gcut": {
+    "target_percentile": 55.0,
+    "gsdt_threshold_x": 5.0,
+    "candidate_method": "app2_gsdt",
+    "candidate_backend": "cuda",
+    "candidate_evidence": {
+      "enabled": true
+    }
   }
 }

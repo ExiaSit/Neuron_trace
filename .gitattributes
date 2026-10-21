@@ -1,0 +1,2 @@
+# Preserve the original APP2 headers byte-for-byte for provenance checks.
+vendor/app2_gsdt/*.h -whitespace

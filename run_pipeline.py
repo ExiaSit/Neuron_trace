@@ -28,7 +28,7 @@ if __name__ == "__main__":
     _bootstrap.add_argument("--config")
     _known, _ = _bootstrap.parse_known_args()
     if _known.config:
-        os.environ["NEURON_V081_CONFIG"] = str(Path(_known.config).resolve())
+        os.environ["NEURON_V082_CONFIG"] = str(Path(_known.config).resolve())
 
 from pipeline_config import ENABLED_STAGES, GCUT, NEURON_IDS, NNUNET, PATHS, PIPELINE, PRUNING, SOMA
 
@@ -68,6 +68,8 @@ def find_gcut_target_swc(neuron_id: int | str) -> Path:
     """Return the G-Cut SWC that should be passed to pruning."""
     stem = image_stem(neuron_id)
     gcut_dir = Path(PATHS["gcut_output_dir"])
+    if (gcut_dir / str(neuron_id)).is_dir():
+        gcut_dir = gcut_dir / str(neuron_id)
     candidates = sorted(gcut_dir.glob(f"{stem}_0000_gcut_soma_*_TARGET.swc"))
     if not candidates:
         candidates = sorted(gcut_dir.glob(f"{stem}_gcut_soma_*_TARGET.swc"))
@@ -607,6 +609,8 @@ def run_gcut(neuron_id: int | str, meta_df: pd.DataFrame) -> bool:
         meta_df,
     )
     name, _result, log_msg = mod.worker_task(args)
+    if _result is None:
+        raise RuntimeError(f"G-Cut failed for {name}: {log_msg}")
     if log_msg and any(token in log_msg for token in ("失败", "崩溃", "Traceback", "Error", "不存在")):
         raise RuntimeError(f"G-Cut reported an issue for {name}: {log_msg}")
     try:

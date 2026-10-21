@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
-CONFIG_FILE = Path(os.environ.get("NEURON_V081_CONFIG", PACKAGE_ROOT / "config.json")).resolve()
+CONFIG_FILE = Path(os.environ.get("NEURON_V082_CONFIG", PACKAGE_ROOT / "config.json")).resolve()
 with CONFIG_FILE.open(encoding="utf-8") as _f:
     CONFIG = json.load(_f)
 
@@ -124,6 +124,9 @@ SOMA = {
 GCUT = {
     "target_percentile": 55.0,
     "gsdt_threshold_x": 5.0,
+    "candidate_method": "app2_gsdt",
+    "candidate_backend": "cuda",
+    "candidate_evidence": {"enabled": True},
 }
 
 PRUNING = {

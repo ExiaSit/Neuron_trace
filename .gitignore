@@ -1,30 +1,7 @@
-# Python cache
-__pycache__/
-*.py[cod]
-*$py.class
-
-# Python build / packaging
-build/
-dist/
-*.egg-info/
-
-# Virtual env
-.venv/
-venv/
-env/
-
-# IDE
-.vscode/
-.idea/
-# Local machine-specific paths and runtime settings
-pipeline_config.py
-neuroutils/config/settings.py
-__pycache__/
-*.pyc
-
-# v0.81 runtime package
 # Local dependencies and machine configuration
-/vendor/
+/vendor/*
+!/vendor/app2_gsdt/
+/vendor/app2_gsdt/build/
 /config.json
 /config.*.local.json
 .env

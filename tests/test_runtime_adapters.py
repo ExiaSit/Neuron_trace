@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT))
 _SANDBOX = tempfile.TemporaryDirectory()
 _config = Path(_SANDBOX.name) / 'config.json'
 _config.write_text(json.dumps({'output_root': './out', 'neuron_ids': [123]}))
-os.environ['NEURON_V081_CONFIG'] = str(_config)
+os.environ['NEURON_V082_CONFIG'] = str(_config)
 import run_pipeline as p
 
 SWC = '1 1 3 4 5 2 -1\n2 3 6 4 5 1 1\n'

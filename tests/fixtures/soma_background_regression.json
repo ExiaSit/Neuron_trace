@@ -1,0 +1,104 @@
+[
+  {
+    "key": "15212_0",
+    "id": "15212",
+    "source_zyx": [
+      123,
+      420,
+      236
+    ],
+    "local_zyx": [
+      32,
+      32,
+      32
+    ],
+    "expected_accepted": false,
+    "source_raw": "/media/pzy/U-Disk2/human_reconstruction/1um_img/img/image_15212_0000.tif",
+    "source_mask": "/media/pzy/U-Disk2/human_reconstruction/mask/image_15212.tif"
+  },
+  {
+    "key": "15212_1",
+    "id": "15212",
+    "source_zyx": [
+      117,
+      438,
+      269
+    ],
+    "local_zyx": [
+      32,
+      32,
+      32
+    ],
+    "expected_accepted": false,
+    "source_raw": "/media/pzy/U-Disk2/human_reconstruction/1um_img/img/image_15212_0000.tif",
+    "source_mask": "/media/pzy/U-Disk2/human_reconstruction/mask/image_15212.tif"
+  },
+  {
+    "key": "15501_2",
+    "id": "15501",
+    "source_zyx": [
+      96,
+      429,
+      433
+    ],
+    "local_zyx": [
+      32,
+      32,
+      32
+    ],
+    "expected_accepted": false,
+    "source_raw": "/media/pzy/U-Disk2/human_reconstruction/1um_img/img/image_15501_0000.tif",
+    "source_mask": "/media/pzy/U-Disk2/human_reconstruction/mask/image_15501.tif"
+  },
+  {
+    "key": "16763_3",
+    "id": "16763",
+    "source_zyx": [
+      65,
+      221,
+      169
+    ],
+    "local_zyx": [
+      32,
+      32,
+      32
+    ],
+    "expected_accepted": true,
+    "source_raw": "/media/pzy/U-Disk2/human_reconstruction/1um_img/img/image_16763_0000.tif",
+    "source_mask": "/media/pzy/U-Disk2/human_reconstruction/mask/image_16763.tif"
+  },
+  {
+    "key": "16763_4",
+    "id": "16763",
+    "source_zyx": [
+      77,
+      352,
+      204
+    ],
+    "local_zyx": [
+      32,
+      32,
+      32
+    ],
+    "expected_accepted": true,
+    "source_raw": "/media/pzy/U-Disk2/human_reconstruction/1um_img/img/image_16763_0000.tif",
+    "source_mask": "/media/pzy/U-Disk2/human_reconstruction/mask/image_16763.tif"
+  },
+  {
+    "key": "16763_5",
+    "id": "16763",
+    "source_zyx": [
+      83,
+      94,
+      206
+    ],
+    "local_zyx": [
+      32,
+      32,
+      32
+    ],
+    "expected_accepted": true,
+    "source_raw": "/media/pzy/U-Disk2/human_reconstruction/1um_img/img/image_16763_0000.tif",
+    "source_mask": "/media/pzy/U-Disk2/human_reconstruction/mask/image_16763.tif"
+  }
+]
