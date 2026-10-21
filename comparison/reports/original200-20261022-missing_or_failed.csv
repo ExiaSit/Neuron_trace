@@ -1,0 +1,5 @@
+id,version_key,version,swc_path,error
+34327,v082_gsdt,v0.82 GSDT current,/data/disk2/compare_v0.82_gsdt_original200_20261022/reconstruction/gcut_pruned/pruning_swcs/image_34327.swc,FileNotFoundError: [Errno 2] No such file or directory: '/data/disk2/compare_v0.82_gsdt_original200_20261022/reconstruction/gcut_pruned/pruning_swcs/image_34327.swc'
+36624,v082_gsdt,v0.82 GSDT current,/data/disk2/compare_v0.82_gsdt_original200_20261022/reconstruction/gcut_pruned/pruning_swcs/image_36624.swc,FileNotFoundError: [Errno 2] No such file or directory: '/data/disk2/compare_v0.82_gsdt_original200_20261022/reconstruction/gcut_pruned/pruning_swcs/image_36624.swc'
+86054,v081,v0.81 historical,/data/disk/v0.81/swc/86054.swc,FileNotFoundError: [Errno 2] No such file or directory: '/data/disk/v0.81/swc/86054.swc'
+86054,v082_gsdt,v0.82 GSDT current,/data/disk2/compare_v0.82_gsdt_original200_20261022/reconstruction/gcut_pruned/pruning_swcs/image_86054.swc,FileNotFoundError: [Errno 2] No such file or directory: '/data/disk2/compare_v0.82_gsdt_original200_20261022/reconstruction/gcut_pruned/pruning_swcs/image_86054.swc'

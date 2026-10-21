@@ -1,0 +1,54 @@
+{
+  "validation_passed": true,
+  "cohort_count": 200,
+  "analysed_count": 200,
+  "reconstruction_succeeded": 197,
+  "reconstruction_failed": 3,
+  "failures": [
+    {
+      "id": "34327",
+      "stage": "prune",
+      "reason": "RuntimeError: Pruning failed for image_34327.swc: No salient tree found after pruning and connectivity checks.",
+      "log_path": "/data/disk2/compare_v0.82_gsdt_original200_20261022/logs/34327/prune.log"
+    },
+    {
+      "id": "86054",
+      "stage": "prune",
+      "reason": "stage_prune.SomaOnlySWCError: SWC 只有一个 Soma 节点，没有任何神经突节点：node_id=1, type=1, parent=-1",
+      "log_path": "/data/disk2/compare_v0.82_gsdt_original200_20261022/logs/86054/prune.log"
+    },
+    {
+      "id": "36624",
+      "stage": "prune",
+      "reason": "KeyError: 2183",
+      "log_path": "/data/disk2/compare_v0.82_gsdt_original200_20261022/logs/36624/prune.log"
+    }
+  ],
+  "paired_count": 197,
+  "legacy_records_reproduced": 799,
+  "legacy_metric_max_abs_difference": {
+    "length": 0.0,
+    "nodes": 0.0,
+    "branches": 0.0,
+    "precision": 0.0,
+    "recall": 0.0,
+    "mean_snr": 0.0
+  },
+  "valid_metric_swc_files": 1196,
+  "new_image_coordinate_swcs": 397,
+  "input_files_verified": 800,
+  "input_stat_unchanged": 800,
+  "input_rehashed": 0,
+  "valid_comparison_pngs": 200,
+  "valid_summary_pngs": 1,
+  "valid_html_links": 1403,
+  "pipeline_source_unchanged": true,
+  "comparison_code_sha256": {
+    "audit.py": "3b26fad81d476c9def6ae0b0e677af5c2b156ca34e0c5dc1d9fe92b285ade8f0",
+    "legacy_prec_rec.py": "0ce77e52fe8473576f77578d2b1d383f39fd6c45e0a9ad890d5f3e454d558507",
+    "metrics.py": "0467dcdec9797a5c4c14891c33007c1a03a1c067d72b09952cb6155ca4251aac",
+    "report.py": "037fb9b3af669670fa8778803e6c3a7a4f2a677c8dea781f7f538a982bee924b",
+    "__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "note": "Integrity validation passed. This does not mean all reconstructions succeeded or establish accuracy against manual truth."
+}

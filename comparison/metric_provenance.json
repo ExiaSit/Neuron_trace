@@ -1,0 +1,14 @@
+{
+  "reference_thread": "codex://threads/019f1b48-6d93-7441-89fe-d19646a47d2d?hostId=remote-ssh-discovered%3Ashiyanshi",
+  "legacy_prec_rec_source": "/data/disk2/compare_v0.82_original200/local_prec_rec_snapshot.py",
+  "legacy_prec_rec_sha256": "0ce77e52fe8473576f77578d2b1d383f39fd6c45e0a9ad890d5f3e454d558507",
+  "wrapper_source": "/data/disk/Neuron_trace/tools/compare_v08_v07_swc_mips.py",
+  "wrapper_functions": [
+    "SwcData",
+    "read_swc",
+    "swc_total_length",
+    "estimate_prec_rec_single"
+  ],
+  "cohort_source": "/data/disk2/compare_v0.82_original200/selected_ids.csv",
+  "cohort_sha256": "0e5f46082e250cab90e344c31b22118da13319fd3e4f74b31c5c1dee2945d374"
+}

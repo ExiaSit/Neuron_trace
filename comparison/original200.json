@@ -1,0 +1,54 @@
+{
+  "cohort_csv": "cohorts/original200.csv",
+  "reference_root": "/data/disk2/compare_v0.82_original200",
+  "output_root": "/data/disk2/compare_v0.82_gsdt_original200_20261022",
+  "pipeline_config": "../config.json",
+  "workers": 6,
+  "gcut_workers": 2,
+  "analysis_workers": 8,
+  "stage_timeout_seconds": 1800,
+  "reference_thread": "codex://threads/019f1b48-6d93-7441-89fe-d19646a47d2d?hostId=remote-ssh-discovered%3Ashiyanshi",
+  "input_alias_root": "/media/pzy/U-Disk2/human_reconstruction",
+  "versions": [
+    {
+      "key": "v07",
+      "label": "v0.7",
+      "legacy_label": "v0.7",
+      "swc_root": "/data/disk3/v0.7/ok",
+      "template": "{id}.swc"
+    },
+    {
+      "key": "v08",
+      "label": "v0.8",
+      "legacy_label": "v0.8",
+      "swc_root": "/data/disk3/v0.8/swc",
+      "template": "{id}.swc"
+    },
+    {
+      "key": "v081",
+      "label": "v0.81 historical",
+      "legacy_label": "v0.81",
+      "swc_root": "/data/disk/v0.81/swc",
+      "template": "{id}.swc"
+    },
+    {
+      "key": "v082_historical",
+      "label": "v0.82 historical (Y fixed)",
+      "legacy_label": "v0.82",
+      "swc_root": "/data/disk2/compare_v0.82_original200/pruning_swcs",
+      "template": "{id}.swc"
+    },
+    {
+      "key": "app2_current",
+      "label": "APP2 current",
+      "product": "trace_app2/down_sampled_swcs_app2",
+      "template": "image_{id}.swc"
+    },
+    {
+      "key": "v082_gsdt",
+      "label": "v0.82 GSDT current",
+      "product": "gcut_pruned/pruning_swcs",
+      "template": "image_{id}.swc"
+    }
+  ]
+}

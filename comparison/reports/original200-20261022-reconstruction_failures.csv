@@ -1,0 +1,4 @@
+id,stage,reason,log_path
+34327,prune,RuntimeError: Pruning failed for image_34327.swc: No salient tree found after pruning and connectivity checks.,/data/disk2/compare_v0.82_gsdt_original200_20261022/logs/34327/prune.log
+86054,prune,"stage_prune.SomaOnlySWCError: SWC 只有一个 Soma 节点，没有任何神经突节点：node_id=1, type=1, parent=-1",/data/disk2/compare_v0.82_gsdt_original200_20261022/logs/86054/prune.log
+36624,prune,KeyError: 2183,/data/disk2/compare_v0.82_gsdt_original200_20261022/logs/36624/prune.log

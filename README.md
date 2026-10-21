@@ -210,3 +210,15 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python -m unittest discover -s tests -v
 过滤/NMS/合并审计、所有 G-Cut 分离 SWC 和胞体区域均与相同输入下的当前版本一致。
 另以 15214 的原始 mask 实跑 APP2 → G-Cut → 重采样 → 0.81 剪枝，完成全部阶段。
 详细范围见 `VALIDATION.md`。移植来源和哈希见 `PORT_PROVENANCE.json`。
+
+## 固定 200 例的历史版本比较
+
+比较与统计入口为 `tools/compare_reconstructions.py`，配置为 `comparison/original200.json`。
+评价方法、固定样本清单、参数、验证检查及使用说明都随 Git 保存，见 [comparison/README.md](comparison/README.md)。
+
+```bash
+python tools/compare_reconstructions.py --config comparison/original200.json
+```
+
+2026-10-22 的 200 例已全部尝试，197 例完成重建；共同有效样本 197 例。
+完整记录与失败原因见 [comparison/reports/original200-20261022.md](comparison/reports/original200-20261022.md)。

@@ -1,2 +1,6 @@
 # Preserve the original APP2 headers byte-for-byte for provenance checks.
 vendor/app2_gsdt/*.h -whitespace
+
+# Preserve the registered historical evaluation source and cohort bytes.
+tools/reconstruction_comparison/legacy_prec_rec.py -whitespace
+comparison/cohorts/original200.csv -whitespace
