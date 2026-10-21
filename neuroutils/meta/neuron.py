@@ -1,7 +1,22 @@
 import os
 import pandas as pd
-from neuroutils.config.settings import NEURON_META_INFO_PATH, NEURON_META_DIR
+from neuroutils.config.settings import NEURON_META_ENCODING, NEURON_META_INFO_PATH, NEURON_META_DIR
 from neuroutils.config.settings import V3D_IMAGE_ROOT
+
+
+def read_meta_csv(path: str, **kwargs) -> pd.DataFrame:
+    encodings = (
+        [NEURON_META_ENCODING]
+        if NEURON_META_ENCODING != "auto"
+        else ["utf-8-sig", "gb18030", "gbk"]
+    )
+    last_error = None
+    for encoding in encodings:
+        try:
+            return pd.read_csv(path, encoding=encoding, **kwargs)
+        except UnicodeDecodeError as exc:
+            last_error = exc
+    raise last_error
 
 
 def split_neuron_meta_table(csv_path: str = None, output_dir: str = None):
@@ -23,7 +38,7 @@ def split_neuron_meta_table(csv_path: str = None, output_dir: str = None):
 
     for _, row in df.iterrows():
         nid = str(int(row["cell_id"]))  # normalize by removing leading zeros
-        row.to_frame().T.to_csv(os.path.join(output_dir, f"{nid}.csv"), index=False, encoding="gbk")
+        row.to_frame().T.to_csv(os.path.join(output_dir, f"{nid}.csv"), index=False, encoding="utf-8-sig")
 
 
 def get_neuron_meta(neuron_id: int, use_cache: bool = True) -> pd.DataFrame:
@@ -45,23 +60,24 @@ def get_neuron_meta(neuron_id: int, use_cache: bool = True) -> pd.DataFrame:
     local_path = os.path.join(NEURON_META_DIR, f"{neuron_id}.csv")
 
     if os.path.exists(local_path) and use_cache:
-        return pd.read_csv(local_path, encoding="gbk")
+        return read_meta_csv(local_path)
 
     # fallback: search in meta CSV and cache it
     if(NEURON_META_INFO_PATH.endswith(".xlsx")):
         full_df = pd.read_excel(NEURON_META_INFO_PATH, engine='openpyxl')
     elif(NEURON_META_INFO_PATH.endswith(".csv")):
-        full_df = pd.read_csv(NEURON_META_INFO_PATH, encoding="gbk")
+        full_df = read_meta_csv(NEURON_META_INFO_PATH, low_memory=False)
     else:
         raise ValueError("Unsupported metadata file format. Must be .csv or .xlsx.")
     # match = full_df[full_df["cell_id"].astype(str) == neuron_id]
-    match = full_df[full_df["Cell ID"].astype(int) == neuron_id]
+    match = full_df[full_df["cell_id"].astype(int) == neuron_id]
+    # match = full_df[full_df["Cell ID"].astype(int) == neuron_id]
     if match.empty:
         raise ValueError(f"Neuron ID {neuron_id} not found in metadata.")
 
     if(use_cache):
         os.makedirs(NEURON_META_DIR, exist_ok=True)
-        match.to_csv(local_path, index=False, encoding="gbk")
+        match.to_csv(local_path, index=False, encoding="utf-8-sig")
     return match
 
 
@@ -168,7 +184,7 @@ def create_csv(todo_neuron_ids):
     for neuron_id in todo_neuron_ids:
         local_path = os.path.join(NEURON_META_DIR, f"{neuron_id}.csv")
         match = full_df[full_df["cell_id"].astype(int) == neuron_id]
-        match.to_csv(local_path, index=False, encoding="gbk")
+        match.to_csv(local_path, index=False, encoding="utf-8-sig")
 
     print("Done")
 

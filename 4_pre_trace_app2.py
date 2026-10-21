@@ -5,6 +5,7 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 import sys
 import time
 import random
@@ -15,35 +16,36 @@ import traceback
 import re
 import glob
 import numpy as np
-from joblib import Parallel, delayed
-from tqdm import tqdm
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from joblib import Parallel, delayed
+from tqdm import tqdm
+from pipeline_config import BASE_DIR, PATHS
 
 # ================= 配置区域 =================
 # 1. Mask 路径
-base_dir ="/data/disk3/zll/origin"
-seg_dir = base_dir + "/mask"
+base_dir = BASE_DIR
+seg_dir = PATHS["merged_mask_dir"]
 
 # 2. 原图路径
-raw_img_dir = base_dir + "/img" 
+raw_img_dir = PATHS["image_1um_dir"]
 
 # 3. 输出路径
-output_dir = base_dir + "/trace_app2"
+output_dir = PATHS["trace_output_dir"]
 
-swc_dir = os.path.join(output_dir, "down_sampled_swcs_app2") 
-marker_dir = os.path.join(output_dir, "markers")
-vis_dir = os.path.join(output_dir, "vis_mip")
+swc_dir =  PATHS["trace_swc_dir"]
+marker_dir =  PATHS["trace_marker_dir"]
+vis_dir =  PATHS["trace_vis_dir"]
 
 # 日志文件
-log_file = os.path.join(output_dir, "process_log.txt")
-timeout_record = os.path.join(output_dir, "record_timeout_5min.txt")
-error_record = os.path.join(output_dir, "record_failed_5min.txt")
-cost_time_record = os.path.join(output_dir, "record_cost_time_5min.txt")
+log_file =  PATHS["pipeline_skip_log"]
+timeout_record =  PATHS["trace_timeout_log"]
+error_record =  PATHS["trace_error_log"]
+cost_time_record =  PATHS["trace_cost_log"]
 
 # Vaa3D 程序路径
-V3D_PATH = "/home/pzy/pzy/Vaa3D-x.1.1.4_Ubuntu/Vaa3D-x" 
+V3D_PATH = str(PATHS["vaa3d_path"])
 # ===========================================
 
 os.makedirs(swc_dir, exist_ok=True)
@@ -67,115 +69,144 @@ def kill_child_processes():
     except psutil.NoSuchProcess:
         pass
 
-# === 可视化函数：生成 2x3 对比图 (修复 Y 轴翻转) ===
-# === 可视化函数：生成 2x3 对比图 (修复 YZ 视图翻转) ===
-def generate_mip_overlay(raw_img_path, swc_path, output_png_path, neuron_id):
-    """
-    生成 2行3列 的 MIP 视图：
-    Row 1: 原图 XY, XZ, YZ
-    Row 2: 原图 XY, XZ, YZ (叠加 SWC)
-    """
-    try:
-        # 1. 读取原图
-        if not os.path.exists(raw_img_path):
-            return "Raw Image Not Found"
-        
-        img = tiff.imread(raw_img_path)
-        # img shape: (Z, Y, X)
-        dim_z, dim_y, dim_x = img.shape 
-        
-        # 2. 计算三视图 MIP
-        mip_xy = np.max(img, axis=0) # (Y, X)
-        mip_xz = np.max(img, axis=1) # (Z, X)
-        mip_yz = np.max(img, axis=2) # (Z, Y)
+def _xy_mip(volume):
+    if volume.ndim == 3:
+        return np.max(volume, axis=0)
+    if volume.ndim == 2:
+        return volume
+    return np.max(np.squeeze(volume), axis=0)
 
-        # 3. 读取 SWC 数据
-        swc_data = {}
-        with open(swc_path, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith('#') or not line: continue
-                parts = line.split()
-                # 格式: ID, type, x, y, z, r, pid
-                nid = int(parts[0])
+
+def _display_vmax(img_2d):
+    if np.max(img_2d) <= 0:
+        return 1
+    vmax = np.percentile(img_2d, 99.5)
+    return vmax if vmax > 0 else np.max(img_2d)
+
+
+def _read_swc_xy_edges(swc_path):
+    nodes = {}
+    edges = []
+    if not swc_path or not os.path.exists(swc_path):
+        return nodes, edges
+    with open(swc_path, "r", encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split()
+            if len(parts) < 7:
+                continue
+            try:
+                node_id = int(float(parts[0]))
                 x = float(parts[2])
                 y = float(parts[3])
-                z = float(parts[4])
-                pid = int(parts[6])
-                swc_data[nid] = {'x': x, 'y': y, 'z': z, 'pid': pid}
+                parent_id = int(float(parts[6]))
+            except ValueError:
+                continue
+            nodes[node_id] = (x, y)
+            if parent_id != -1:
+                edges.append((node_id, parent_id))
+    return nodes, edges
 
-        # 4. 绘图配置
-        fig, axes = plt.subplots(2, 3, figsize=(18, 12), dpi=100)
-        plt.subplots_adjust(wspace=0.1, hspace=0.2)
-        
-        # 计算亮度范围
-        vmax_xy = np.percentile(mip_xy, 99.5) if mip_xy.max() > 0 else 255
-        vmax_xz = np.percentile(mip_xz, 99.5) if mip_xz.max() > 0 else 255
-        vmax_yz = np.percentile(mip_yz, 99.5) if mip_yz.max() > 0 else 255
 
-        # === Row 1: 纯原图 ===
-        axes[0, 0].imshow(mip_xy, cmap='gray', vmin=0, vmax=vmax_xy) 
-        axes[0, 0].set_title(f"XY Raw")
-        axes[0, 0].axis('off')
-        
-        axes[0, 1].imshow(mip_xz, cmap='gray', aspect='auto', vmin=0, vmax=vmax_xz)
-        axes[0, 1].set_title(f"XZ Raw")
-        axes[0, 1].axis('off')
+LEGACY_SWC_Y_FLIP_MARKER = "# y_axis_flipped_to_image_coordinates"
+SWC_Y_FLIP_MARKER = "# app2_native_to_image_zero_based_v2"
 
-        axes[0, 2].imshow(mip_yz, cmap='gray', aspect='auto', vmin=0, vmax=vmax_yz)
-        axes[0, 2].set_title(f"YZ Raw")
-        axes[0, 2].axis('off')
 
-        # === Row 2: 叠加图 ===
-        axes[1, 0].imshow(mip_xy, cmap='gray', vmin=0, vmax=vmax_xy)
-        axes[1, 1].imshow(mip_xz, cmap='gray', aspect='auto', vmin=0, vmax=vmax_xz)
-        axes[1, 2].imshow(mip_yz, cmap='gray', aspect='auto', vmin=0, vmax=vmax_yz)
+def image_to_app2_marker(xyz, shape_zyx):
+    """Image voxel -> marker for the calibrated Vaa3D 3.601 vn2 plugin.
 
-        axes[1, 0].set_title(f"XY Overlay")
-        axes[1, 1].set_title(f"XZ Overlay")
-        axes[1, 2].set_title(f"YZ Overlay")
-        axes[1, 0].axis('off')
-        axes[1, 1].axis('off')
-        axes[1, 2].axis('off')
+    TIFF loading reverses Y. This plugin subtracts TWO from marker-file
+    coordinates before tracing (verified against its initial SWC roots).
+    Native SWCs themselves are zero based. Do not apply this offset to SWCs.
+    """
+    xyz = np.asarray(xyz, dtype=float)
+    bounds = np.asarray(shape_zyx[::-1], dtype=int)
+    if xyz.shape != (3,) or not np.isfinite(xyz).all() or np.any(xyz < 0) or np.any(xyz >= bounds):
+        raise ValueError(f'Soma {xyz} outside image {shape_zyx}')
+    x, y, z = np.rint(xyz).astype(int)
+    if np.any(np.array([x, y, z]) >= bounds):
+        raise ValueError('Rounded soma outside image')
+    return [int(x + 2), int(shape_zyx[-2] - 1 - y + 2), int(z + 2)]
 
-        # 绘制 SWC 线条
-        line_color = 'r'
-        line_width = 1.0
-        alpha = 0.7
 
-        for nid, node in swc_data.items():
-            pid = node['pid']
-            if pid != -1 and pid in swc_data:
-                parent = swc_data[pid]
-                
-                # === 关键修正：计算翻转后的 Y 坐标 ===
-                y_node_flipped = dim_y - node['y']
-                y_parent_flipped = dim_y - parent['y']
-                
-                # 1. XY View (x, y)
-                # Y作为纵轴，使用翻转后的Y
-                axes[1, 0].plot([node['x'], parent['x']], [y_node_flipped, y_parent_flipped], 
-                                color=line_color, linewidth=line_width, alpha=alpha)
-                
-                # 2. XZ View (x, z)
-                # Z作为纵轴，X作为横轴 (无需修改)
-                axes[1, 1].plot([node['x'], parent['x']], [node['z'], parent['z']], 
-                                color=line_color, linewidth=line_width, alpha=alpha)
-                
-                # 3. YZ View (y, z)
-                # 【修改点】Y作为横轴，也必须使用翻转后的Y！
-                # Z作为纵轴 (无需修改)
-                axes[1, 2].plot([y_node_flipped, y_parent_flipped], [node['z'], parent['z']], 
-                                color=line_color, linewidth=line_width, alpha=alpha)
+def flip_swc_y_to_image_coordinates(swc_path, image_height):
+    """Flip APP2's Y coordinate once so SWC coordinates match image coordinates."""
+    with open(swc_path, "r", encoding="utf-8", errors="ignore") as f:
+        lines = f.readlines()
 
-        plt.suptitle(f"Neuron {neuron_id} - MIP Validation", fontsize=16)
-        plt.savefig(output_png_path, bbox_inches='tight')
+    if any(line.strip() == SWC_Y_FLIP_MARKER for line in lines):
+        return False
+    if any(line.strip() == LEGACY_SWC_Y_FLIP_MARKER for line in lines):
+        raise ValueError('Legacy H-y coordinates: migrate Y by -1 or regenerate from native SWC; do not flip twice')
+
+    output_lines = [SWC_Y_FLIP_MARKER + "\n"]
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            output_lines.append(line)
+            continue
+
+        parts = stripped.split()
+        if len(parts) < 7:
+            output_lines.append(line)
+            continue
+        try:
+            parts[3] = f"{float(image_height) - 1 - float(parts[3]):.5f}"
+        except ValueError:
+            output_lines.append(line)
+            continue
+        output_lines.append(" ".join(parts) + "\n")
+
+    temp_path = swc_path + ".yflip.tmp"
+    with open(temp_path, "w", encoding="utf-8") as f:
+        f.writelines(output_lines)
+    os.replace(temp_path, swc_path)
+    return True
+
+
+def generate_xy_mip_visualization(raw_img_path, mask_path, swc_path, output_png_path, neuron_id):
+    try:
+        os.makedirs(os.path.dirname(output_png_path), exist_ok=True)
+        raw = tiff.imread(raw_img_path)
+        mask = tiff.imread(mask_path)
+        raw_xy = _xy_mip(raw)
+        mask_xy = _xy_mip(mask) > 0
+        nodes, edges = _read_swc_xy_edges(swc_path)
+
+        fig, axes = plt.subplots(1, 2, figsize=(12, 6), dpi=150)
+        for ax in axes:
+            ax.imshow(raw_xy, cmap="gray", vmin=0, vmax=_display_vmax(raw_xy))
+            ax.axis("off")
+
+        axes[0].set_title(f"Neuron {neuron_id} APP2 XY")
+        for node_id, parent_id in edges:
+            if node_id not in nodes or parent_id not in nodes:
+                continue
+            x0, y0 = nodes[node_id]
+            x1, y1 = nodes[parent_id]
+            axes[0].plot([x0, x1], [y0, y1], color="cyan", linewidth=0.7, alpha=0.85)
+        if nodes:
+            xs, ys = zip(*nodes.values())
+            axes[0].scatter(xs, ys, s=2, c="yellow", alpha=0.7)
+
+        axes[1].set_title(f"Neuron {neuron_id} Raw + Mask XY")
+        overlay = np.zeros((*mask_xy.shape, 4), dtype=float)
+        overlay[..., 0] = 1.0
+        overlay[..., 3] = mask_xy.astype(float) * 0.35
+        axes[1].imshow(overlay)
+
+        fig.tight_layout()
+        fig.savefig(output_png_path, bbox_inches="tight")
         plt.close(fig)
         return "OK"
     except Exception as e:
-        plt.close('all')
-        return f"Vis Error: {str(e)}"
-# === 生成 Center Marker ===
+        plt.close("all")
+        return f"VIS_FAIL: {e}"
+
+
+# === Marker 生成函数 ===
 def generate_center_marker(neuron_id, shape_zyx, output_dir):
     try:
         try:
@@ -185,17 +216,21 @@ def generate_center_marker(neuron_id, shape_zyx, output_dir):
             center_z = int(round(soma_z_raw * (z_resolution / 1000)))
             center_y = int(round(soma_y_raw * (xy_resolution / 1000)))
             center_x = int(round(soma_x_raw * (xy_resolution / 1000)))
-            print( f"【Info】Using Geometric Center: ({center_x}, {center_y}, {center_z}) for neuron {neuron_id}")
-            print( f"【Info】Original Soma Position (raw): ({soma_x_raw}, {soma_y_raw}, {soma_z_raw}), Resolutions: (XY: {xy_resolution} nm, Z: {z_resolution} nm)" )
+            # print( f"【Info】Using Geometric Center: ({center_x}, {center_y}, {center_z}) for neuron {neuron_id}")
+            # print( f"【Info】Original Soma Position (raw): ({soma_x_raw}, {soma_y_raw}, {soma_z_raw}), Resolutions: (XY: {xy_resolution} nm, Z: {z_resolution} nm)" )
             # raise ImportError("Prefer Geometric Center") 
-        except:
-            d, h, w = shape_zyx
-            center_x = w // 2
-            center_y = h // 2
-            center_z = d // 2
+        # except:
+        #     d, h, w = shape_zyx
+        #     center_x = w // 2
+        #     center_y = h // 2
+        #     center_z = d // 2
+        except Exception as e:
+            raise Exception(f"Failed to compute geometric center: {e},for neuron {neuron_id}")
+
         
         marker_header = "##x,y,z,radius,shape,name,comment, color_r,color_g,color_b"
-        marker_content = f"{center_x}, {center_y}, {center_z}, 1, 1, soma_{neuron_id}, , 255, 0, 0"
+        marker_xyz = image_to_app2_marker([center_x, center_y, center_z], shape_zyx)
+        marker_content = ", ".join(map(str, marker_xyz)) + f", 1, 1, soma_{neuron_id}, , 255, 0, 0"
         filename = f"marker_{neuron_id}.marker"
         filepath = os.path.join(output_dir, filename)
         
@@ -208,38 +243,63 @@ def generate_center_marker(neuron_id, shape_zyx, output_dir):
         raise Exception(f"Marker Gen Failed: {e}")
 
 # === APP2 运行逻辑 ===
+def _build_vaa3d_env(v3d_path):
+    env = os.environ.copy()
+    v3d_bin_dir = os.path.dirname(os.path.abspath(v3d_path))
+    current_ld_path = env.get("LD_LIBRARY_PATH", "")
+    env["LD_LIBRARY_PATH"] = (
+        f"{v3d_bin_dir}:{current_ld_path}" if current_ld_path else v3d_bin_dir
+    )
+    return env
+
+
 def run_app2_locally(img_file, marker_file, out_swc_file, timeout_sec):
     if os.path.exists(out_swc_file): return
 
     expected_result_base = img_file + "_app2.swc"
-    
-    cmd = (
-        f'xvfb-run -a -s "-screen 0 640x480x16" {V3D_PATH} -x vn2 -f app2 -i {img_file} -p {marker_file} 0 10 0 1 1 1 1 10'
+    app2_candidates = lambda: sorted(
+        glob.glob(img_file + "*_app2.swc"),
+        key=lambda path: os.path.getmtime(path),
+        reverse=True,
     )
-    
-    env = os.environ.copy()
-    ld_path = os.path.dirname(os.path.dirname(V3D_PATH)) + "/lib"
+    ini_candidates = lambda: sorted(glob.glob(img_file + "*_ini.swc"))
+
+    def cleanup_ini_outputs():
+        for ini_path in ini_candidates():
+            try:
+                os.remove(ini_path)
+            except OSError:
+                pass
+
+    cmd = [
+        "xvfb-run", "-a", "-s", "-screen 0 640x480x16",
+        V3D_PATH,
+        "-x", "vn2",
+        "-f", "app2",
+        "-i", img_file,
+        "-p", marker_file,
+        "0", "10", "0", "1", "1", "1", "1", "10",
+    ]
+    env = _build_vaa3d_env(V3D_PATH)
     
     try:
         subprocess.run(
-            cmd, shell=True, check=True, env=env, timeout=timeout_sec, capture_output=True
+            cmd, check=True, env=env, timeout=timeout_sec, capture_output=True
         )
         
         if os.path.exists(expected_result_base):
             os.rename(expected_result_base, out_swc_file)
+            cleanup_ini_outputs()
             return
 
-        ini_file = img_file + "_ini.swc"
-        if os.path.exists(ini_file):
-            os.rename(ini_file, out_swc_file)
-            return
-
-        potential_files = glob.glob(img_file + "*app2*.swc")
+        potential_files = app2_candidates()
         if potential_files:
             os.rename(potential_files[0], out_swc_file)
+            cleanup_ini_outputs()
             return
 
-        raise Exception("Trace failed: No output SWC found")
+        cleanup_ini_outputs()
+        raise Exception("Trace failed: No APP2 output SWC found")
 
     except subprocess.TimeoutExpired:
         raise TimeoutException("Subprocess timed out")
@@ -271,35 +331,38 @@ def process_single_file(mask_file, swc_file, marker_dir, vis_dir, raw_img_dir):
         print(f"【错误】Mask 文件缺失: {mask_file}")
         return (fname, "MISSING", "", 0)
     
+    with tiff.TiffFile(mask_file) as tif:
+        mask_shape = tif.series[0].shape
+    image_height = mask_shape[-2]
+
     if os.path.exists(swc_file):
-        if raw_file_path:
-            vis_png = os.path.join(vis_dir, f"{neuron_id_str}_mip.png")
-            if not os.path.exists(vis_png):
-                generate_mip_overlay(raw_file_path, swc_file, vis_png, neuron_id_str)
+        swc_was_flipped = flip_swc_y_to_image_coordinates(swc_file, image_height)
+        if vis_dir:
+            vis_png = os.path.join(vis_dir, f"{neuron_id_str}_xy_mip.png")
+            if swc_was_flipped or not os.path.exists(vis_png):
+                generate_xy_mip_visualization(raw_file_path, mask_file, swc_file, vis_png, neuron_id_str)
         return (fname, "SKIP", "", 0)
 
     CURRENT_TIMEOUT = 300 
     max_retries = 2
     
     for attempt in range(max_retries):
-        print(f"开始第一次{swc_file}")
         generated_marker_path = None
         try:
             sleep_time = random.uniform(0.1, 1.0) if attempt == 0 else random.uniform(2.0, 4.0)
             time.sleep(sleep_time)
 
-            with tiff.TiffFile(mask_file) as tif:
-                img_shape = tif.pages[0].shape 
-            
-            generated_marker_path = generate_center_marker(neuron_id_str, img_shape, marker_dir)
+            generated_marker_path = generate_center_marker(neuron_id_str, mask_shape, marker_dir)
             
             run_app2_locally(mask_file, generated_marker_path, swc_file, timeout_sec=CURRENT_TIMEOUT)
-            
-            if raw_file_path and os.path.exists(swc_file):
-                vis_png = os.path.join(vis_dir, f"{neuron_id_str}_mip.png")
-                res = generate_mip_overlay(raw_file_path, swc_file, vis_png, neuron_id_str)
-                if res != "OK":
-                    pass 
+
+            # APP2 uses a bottom-origin Y axis. Convert it before saving downstream
+            # products so both the SWC and its MIP use image (top-origin) coordinates.
+            flip_swc_y_to_image_coordinates(swc_file, image_height)
+
+            if vis_dir and os.path.exists(swc_file):
+                vis_png = os.path.join(vis_dir, f"{neuron_id_str}_xy_mip.png")
+                generate_xy_mip_visualization(raw_file_path, mask_file, swc_file, vis_png, neuron_id_str)
 
             # if generated_marker_path and os.path.exists(generated_marker_path):
             #     try: os.remove(generated_marker_path)
@@ -341,16 +404,13 @@ if __name__ == "__main__":
                 os.path.join(seg_dir, f), 
                 os.path.join(swc_dir, f.replace(".tif", ".swc")),
                 marker_dir,
-                vis_dir,      
+                vis_dir,
                 raw_img_dir   
             )
             
     total_tasks = len(all_files)
     print(f"Total files: {total_tasks}")
     
-    import matplotlib
-    matplotlib.use('Agg')
-
     results_gen = Parallel(n_jobs=4, return_as="generator", pre_dispatch="2*n_jobs")(
         delayed(process_single_file)(*args) for args in task_generator()
     )
@@ -382,7 +442,7 @@ if __name__ == "__main__":
         print("\n=== Processing Finished ===")
         print(f"Success: {stats['SUCCESS']}")
         print(f"Failed : {stats['FAIL']}")
-        print(f"Vis saved in: {vis_dir}")
+        print(f"XY visualization saved in: {vis_dir}")
 
     except KeyboardInterrupt:
         print("\n[User stopped]")

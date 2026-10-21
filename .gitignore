@@ -1,0 +1,78 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python build / packaging
+build/
+dist/
+*.egg-info/
+
+# Virtual env
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+# Local machine-specific paths and runtime settings
+pipeline_config.py
+neuroutils/config/settings.py
+__pycache__/
+*.pyc
+
+# v0.81 runtime package
+# Local dependencies and machine configuration
+/vendor/
+/config.json
+/config.*.local.json
+.env
+.env.*
+
+# Runtime inputs, outputs, and local records
+/outputs/
+/results/
+/validation/
+/history/
+/reference/
+/docs/
+/metadata/
+/data/
+/img/
+/mask/
+/soma_img/
+/soma_seg/
+/1um_neurite_seg/
+/trace_app2/
+/gcut_output/
+/gcut_pruned/
+*.log
+*.swc
+*.eswc
+*.tif
+*.tiff
+*.v3dpbd
+*.v3draw
+*.pth
+*.pt
+
+# Python and editor artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.vscode/
+.idea/
+*.bak
+*.bak_*
+*.tmp
+.DS_Store
+
+# Shared configuration code is part of the project
+!/pipeline_config.py
+!/neuroutils/config/settings.py

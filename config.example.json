@@ -1,0 +1,20 @@
+{
+  "neuron_ids": [],
+  "output_root": "./outputs",
+  "v3d_root": "/path/to/Cell_Image",
+  "metadata_file": "/path/to/metadata.csv",
+  "vaa3d_app2": "/path/to/vaa3d-3.601/bin/vaa3d",
+  "vaa3d_resample": "/path/to/Vaa3D-x",
+  "pipeline": {
+    "mode": "neuron",
+    "stage_max_tasks": 1,
+    "gpu_max_tasks": 1,
+    "infer_batch_size": 1
+  },
+  "nnunet": {
+    "soma_results": "/path/to/nnUNet_results",
+    "neurite_results": "/path/to/nnUNet_results",
+    "gpu_id": 0,
+    "device": "cuda"
+  }
+}
