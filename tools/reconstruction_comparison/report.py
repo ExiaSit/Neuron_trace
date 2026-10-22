@@ -25,7 +25,7 @@ from . import legacy_prec_rec as evaluator
 from .metrics import read_swc,swc_total_length,estimate_prec_rec_single
 
 COLORS=['#b76055','#218eaa','#9873b2','#b38c37','#64778c','#25865d']
-METRICS=('length','branches','nodes','precision','recall','mean_snr')
+METRICS=('length','branches','nodes','precision','recall','mean_snr','mean_branch_length')
 
 
 def save(path,value):
@@ -56,9 +56,34 @@ def structural(swc,shape):
     xyz=np.array([v[:3] for v in swc.nodes.values()]);children=dict.fromkeys(swc.nodes,0)
     for parent in swc.parents.values():
         if parent in children:children[parent]+=1
+    lengths=branch_lengths(swc)
     return dict(roots=sum(p<0 for p in swc.parents.values()),tips=sum(c==0 for c in children.values()),
        branchpoints=sum(c>1 for c in children.values()),branches=sum(c==0 or c>1 for c in children.values()),
+       branch_segments=len(lengths),mean_branch_length=float(np.mean(lengths)) if lengths else 0.,
        out_of_image_nodes=int(np.sum(np.any((xyz<0)|(xyz>=np.array(shape)[::-1]),axis=1))))
+
+
+def branch_lengths(swc):
+    """3D arc lengths of maximal root/fork-to-fork/tip paths, in micrometres.
+
+    Each edge belongs to exactly one segment. Single-node trees have no
+    segments; zero-length paths with distinct nodes are retained.
+    """
+    validate_topology(swc)
+    children={node:[] for node in swc.nodes}
+    for node,parent in swc.parents.items():
+        if parent!=-1:children[parent].append(node)
+    lengths=[]
+    for start,descendants in children.items():
+        if swc.parents[start]!=-1 and len(descendants)==1:continue
+        for node in descendants:
+            previous=start;length=0.
+            while True:
+                length+=math.dist(swc.nodes[previous][:3],swc.nodes[node][:3])
+                if len(children[node])!=1:break
+                previous,node=node,children[node][0]
+            lengths.append(length)
+    return lengths
 
 
 def validate_topology(swc):
@@ -82,7 +107,7 @@ def summarize(rows,versions):
             group=[r for r in rows if r['version_key']==v['key'] and not r['error'] and (scope=='available' or r['id'] in common)]
             result=dict(scope=scope,version_key=v['key'],version=v['label'],count=len(group))
             for key in METRICS:
-                name='mean_snr' if key=='mean_snr' else 'mean_'+key
+                name=key if key in ('mean_snr','mean_branch_length') else 'mean_'+key
                 result[name]=float(np.mean([float(r[key]) for r in group])) if group else None
             for key in ('length','branches','nodes'):result['total_'+key]=sum(float(r[key]) for r in group)
             summary.append(result)
@@ -143,6 +168,7 @@ def charts(summary,out):
     paired=[r for r in summary if r['scope']=='paired_all_versions'];labels=[r['version'].replace(' historical','\nhistorical').replace(' current','\ncurrent') for r in paired]
     fig,axes=plt.subplots(2,4,figsize=(21,10),dpi=160)
     items=[('mean_length','Mean length (um)'),('total_length','Total length (um)'),('mean_branches','Mean critical-point branch count'),('mean_nodes','Mean SWC nodes'),
+           ('mean_branch_length','Mean branch length (um; cell-weighted)'),
            ('mean_precision','Legacy heuristic Precision'),('mean_recall','Legacy endpoint Recall'),('mean_snr','Mean SNR')]
     for ax,(key,title) in zip(axes.flat,items):
         values=[float(r[key]) if r[key] is not None else 0 for r in paired]
@@ -151,7 +177,6 @@ def charts(summary,out):
         ax.tick_params(axis='x',labelsize=7,rotation=20)
         ax.set_ylim(0,1.1 if key in ('mean_precision','mean_recall') else max(max(values)*1.22,1.))
         ax.grid(axis='y',alpha=.2);ax.set_axisbelow(True)
-    axes.flat[-1].axis('off');axes.flat[-1].text(0,.8,'Same fixed cohort; shared valid IDs\nPR: historical image-based heuristics\nNo manual reconstruction ground truth\nMorphology uses original final SWCs\nPR resampling step: 1 um',fontsize=11,va='top')
     count=paired[0]['count'] if paired else 0
     fig.suptitle(f'Original 200 cohort: {count} shared valid cases | current v0.82 GSDT vs historical versions')
     fig.tight_layout();fig.savefig(out/'summary_metrics.png');plt.close(fig)
@@ -161,8 +186,8 @@ def gallery(cfg,rows,summary,common,complete):
     out=Path(cfg['output_root']);by_id={}
     for r in rows:by_id.setdefault(r['id'],[]).append(r)
     paired=[r for r in summary if r['scope']=='paired_all_versions']
-    headers=['版本','共同有效例数','平均长度 (um)','总长度 (um)','平均分枝数','平均节点数','历史 Precision','历史 Recall','SNR']
-    columns=['version','count','mean_length','total_length','mean_branches','mean_nodes','mean_precision','mean_recall','mean_snr']
+    headers=['版本','共同有效例数','平均长度 (um)','总长度 (um)','平均分枝数','平均分支长度 (um)','平均节点数','历史 Precision','历史 Recall','SNR']
+    columns=['version','count','mean_length','total_length','mean_branches','mean_branch_length','mean_nodes','mean_precision','mean_recall','mean_snr']
     table='<tr>'+''.join('<th>'+x+'</th>' for x in headers)+'</tr>'
     for r in paired:
         table+='<tr>'+''.join('<td>'+html.escape(f'{r[k]:.4f}' if isinstance(r[k],float) else str(r[k]))+'</td>' for k in columns)+'</tr>'
@@ -183,6 +208,7 @@ def gallery(cfg,rows,summary,common,complete):
     page+=f'<p>当前已分析 {len(by_id)}/200 例；共同有效 {len(common)} 例；状态：'+('已完成' if complete else '计算中')+'</p>'
     page+='<p>历史 v0.82 指参考会话中修正 Y 坐标后的旧版；当前版是本次 Git 分支 v0.82 的 GSDT 流程，使用原始 mask，不做 mask 补全。APP2 为本次重新生成的剪枝前输出。</p>'
     page+='<p>PR 沿用参考会话的固定启发式实现，不是对人工真值的准确率。节点、分枝、长度描述结构规模，不能单独作为优劣判断。</p>'
+    page+='<p>平均分支长度：沿三维 SWC 将根节点/分叉点至下一分叉点/末梢点作为一段，累加路径长度；先计算每例平均值，再对共同样本等权平均。分母为实际分支段数（逐例 CSV 的 branch_segments），与旧分枝计数不同。无边树取 0。</p>'
     page+='<p><a href="summary_metrics.csv">汇总 CSV</a> | <a href="per_cell_metrics.csv">逐例 CSV</a> | <a href="paired_deltas.csv">配对差值与区间</a> | <a href="missing_or_failed.csv">缺失指标</a> | <a href="reconstruction_failures.csv">重建失败原因</a> | <a href="run_manifest.json">运行来源</a></p>'
     page+='<p><input id="query" placeholder="输入编号筛选"><button onclick="location.hash=\'cell-\'+document.getElementById(\'query\').value">跳转</button></p>'
     page+='<table>'+table+'</table><img src="summary_metrics.png"></header>'+''.join(cards)+'</html>'
@@ -223,6 +249,12 @@ def build(cfg):
                     write_csv(out/'per_cell_metrics.csv',rows);write_csv(out/'summary_metrics.csv',partial)
                     write_csv(out/'missing_or_failed.csv',[r for r in rows if r['error']],fields=['id','version_key','version','swc_path','error'])
                     charts(partial,out);gallery(cfg,rows,partial,common,complete=False)
+    return publish(cfg,rows,ids,errors,actual)
+
+
+def publish(cfg,rows,ids,errors,actual):
+    """Write shared numerical and visual reports after evaluation or refresh."""
+    out=Path(cfg['output_root'])
     rows.sort(key=lambda r:(int(r['id']),[v['key'] for v in cfg['versions']].index(r['version_key'])))
     summary,common=summarize(rows,cfg['versions'])
     write_csv(out/'per_cell_metrics.csv',rows);write_csv(out/'summary_metrics.csv',summary)
@@ -244,11 +276,13 @@ def paired_deltas(rows,versions,common,seed=20261022):
     """Cell-level paired changes; do not treat SWC nodes as independent samples."""
     target=versions[-1]['key'];indexed={(r['id'],r['version_key']):r for r in rows if not r['error']}
     result=[];rng=np.random.default_rng(seed)
-    for version in versions[:-1]:
+    for version_index,version in enumerate(versions[:-1]):
         for metric in METRICS:
             values=np.array([float(indexed[cid,target][metric])-float(indexed[cid,version['key']][metric]) for cid in common])
             if not len(values):continue
-            means=values[rng.integers(0,len(values),size=(2000,len(values)))].mean(axis=1)
+            # Extending the metric set must not change existing bootstrap draws.
+            metric_rng=np.random.default_rng(np.random.SeedSequence([seed,version_index,1])) if metric=='mean_branch_length' else rng
+            means=values[metric_rng.integers(0,len(values),size=(2000,len(values)))].mean(axis=1)
             lo,hi=np.quantile(means,[.025,.975])
             result.append(dict(scope='paired_all_versions',reference=version['label'],target=versions[-1]['label'],metric=metric,
                 count=len(values),mean_delta=float(values.mean()),median_delta=float(np.median(values)),
@@ -276,6 +310,30 @@ def render_existing(cfg):
     charts(report['summary'],out);gallery(cfg,rows,report['summary'],report['paired_ids'],complete=True)
 
 
+def refresh_structure(cfg):
+    """Extend cached metrics from unchanged SWCs, without tracing or PR work."""
+    out=Path(cfg['output_root'])
+    comparison=json.loads((out/'comparison_summary.json').read_text())
+    if comparison['analysis_errors']:raise ValueError('Resolve earlier analysis errors before refreshing')
+    if sha(Path(__file__).with_name('legacy_prec_rec.py'))!=comparison['metric_sha256']:
+        raise ValueError('Historical PR source changed; cached metrics cannot be reused')
+    ids=json.loads((out/'preflight.json').read_text())['ids'];rows=[]
+    updated={}
+    for cid in ids:
+        manifest=json.loads((out/'manifests'/f'{cid}.json').read_text())
+        group=json.loads((out/'metrics'/f'{cid}.json').read_text())
+        if {r['version_key'] for r in group}!={v['key'] for v in cfg['versions']}:
+            raise ValueError(f'{cid}: cached versions do not match configuration')
+        for row in group:
+            if row['error']:continue
+            path=Path(row['swc_path'])
+            if sha(path)!=row['swc_sha256']:raise ValueError(f'{cid}: SWC changed: {path}')
+            row.update(structural(read_swc(path),manifest['shape']))
+        updated[cid]=group;rows.extend(group)
+    for cid,group in updated.items():save(out/'metrics'/f'{cid}.json',group)
+    return publish(cfg,rows,ids,[],comparison['metric_sha256'])
+
+
 def write_text_report(cfg,comparison,validation):
     """Human-readable outcome with paired denominators and explicit failures."""
     out=Path(cfg['output_root']);count=comparison['paired_count']
@@ -286,10 +344,12 @@ def write_text_report(cfg,comparison,validation):
        '历史 v0.82 是参考会话中修正 Y 坐标后的旧结果；本次 v0.82 为 GSDT 版。两者名称相同但流程不同。',
        '本次是完整版本对比，不能把全部差异单独归因于 GSDT。APP2 列为本次重跑的剪枝前结构。','',
        f'## 共同有效 {count} 例','',
-       '| 版本 | 平均长度 µm | 总长度 µm | 平均分枝数 | 平均节点数 | 历史 Precision | 历史 Recall | SNR |',
-       '|---|---:|---:|---:|---:|---:|---:|---:|']
+       '| 版本 | 平均长度 µm | 总长度 µm | 平均分枝数 | 平均分支长度 µm | 平均节点数 | 历史 Precision | 历史 Recall | SNR |',
+       '|---|---:|---:|---:|---:|---:|---:|---:|---:|']
     for r in paired:
-        lines.append(f"| {r['version']} | {r['mean_length']:.3f} | {r['total_length']:.3f} | {r['mean_branches']:.3f} | {r['mean_nodes']:.3f} | {r['mean_precision']:.6f} | {r['mean_recall']:.6f} | {r['mean_snr']:.6f} |")
+        lines.append(f"| {r['version']} | {r['mean_length']:.3f} | {r['total_length']:.3f} | {r['mean_branches']:.3f} | {r['mean_branch_length']:.3f} | {r['mean_nodes']:.3f} | {r['mean_precision']:.6f} | {r['mean_recall']:.6f} | {r['mean_snr']:.6f} |")
+    lines+=['','平均分支长度以根节点/分叉点至下一分叉点/末梢点的三维路径为一段；先计算每例的段长均值，再对细胞等权平均。',
+       '逐例字段 `branch_segments` 为实际分支段数，与历史“末梢＋分叉点”的 `branches` 不同；无边树的段数与均长均为 0。']
     lines+=['','## 与历史 v0.82 的配对变化','',
        '以同一细胞为单位计算“当前版 − 历史版”。bootstrap 为本批样本的描述性区间。','',
        '| 指标 | 平均变化 | 95% bootstrap 区间 | 增加 / 减少 / 不变例数 |','|---|---:|---|---|']

@@ -10,7 +10,7 @@ import numpy as np
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'tools'))
 from reconstruction_comparison.metrics import read_swc,swc_total_length
-from reconstruction_comparison.report import structural,summarize,paired_deltas,write_csv,validate_topology
+from reconstruction_comparison.report import branch_lengths,structural,summarize,paired_deltas,write_csv,validate_topology
 spec=importlib.util.spec_from_file_location('comparison_driver',ROOT/'tools/compare_reconstructions.py')
 driver=importlib.util.module_from_spec(spec);spec.loader.exec_module(driver)
 
@@ -34,8 +34,43 @@ class ComparisonMethods(unittest.TestCase):
     def rows(self):
         rows=[]
         for cid,key,length,error in [('1','old',10.,''),('2','old',100.,''),('1','new',20.,''),('2','new',0.,'missing')]:
-            rows.append(dict(id=cid,version_key=key,error=error,length=length,nodes=3,branches=1,precision=.8,recall=.5,mean_snr=4.))
+            rows.append(dict(id=cid,version_key=key,error=error,length=length,nodes=3,branches=1,mean_branch_length=length/2,precision=.8,recall=.5,mean_snr=4.))
         return rows
+
+    def test_branch_paths_use_3d_arc_length_and_partition_every_edge(self):
+        from reconstruction_comparison.metrics import SwcData
+        # A bent 5+12 um trunk, then two terminal paths of 5 and 6 um.
+        swc=SwcData(nodes={1:(0,0,0,1),2:(3,4,0,1),3:(3,4,12,1),
+                           4:(6,8,12,1),5:(3,4,18,1)},parents={1:-1,2:1,3:2,4:3,5:3})
+        self.assertEqual(branch_lengths(swc),[17.,5.,6.])
+        result=structural(swc,(30,30,30))
+        self.assertEqual(result['branch_segments'],3)
+        self.assertAlmostEqual(result['mean_branch_length'],28/3)
+        self.assertEqual(sum(branch_lengths(swc)),swc_total_length(swc)[0])
+
+    def test_branch_length_does_not_depend_on_sampling_density(self):
+        from reconstruction_comparison.metrics import SwcData
+        a=SwcData(nodes={1:(0,0,0,1),2:(3,4,0,1)},parents={1:-1,2:1})
+        b=SwcData(nodes={1:(0,0,0,1),2:(1.5,2,0,1),3:(3,4,0,1)},parents={1:-1,2:1,3:2})
+        self.assertEqual(branch_lengths(a),branch_lengths(b))
+
+    def test_root_forks_forests_and_single_nodes(self):
+        from reconstruction_comparison.metrics import SwcData
+        swc=SwcData(nodes={1:(0,0,0,1),2:(1,0,0,1),3:(0,2,0,1),4:(5,0,0,1)},
+                    parents={1:-1,2:1,3:1,4:-1})
+        result=structural(swc,(10,10,10))
+        self.assertEqual(result['branches'],4)  # Historical count includes root fork and isolated tip.
+        self.assertEqual(result['branch_segments'],2)
+        self.assertEqual(result['mean_branch_length'],1.5)
+        single=SwcData(nodes={1:(0,0,0,1)},parents={1:-1})
+        self.assertEqual(branch_lengths(single),[])
+        self.assertEqual(structural(single,(1,1,1))['mean_branch_length'],0.)
+
+    def test_branch_summary_weights_cells_equally(self):
+        rows=self.rows();rows[1]['mean_branch_length']=100.
+        summary,_=summarize(rows,[dict(key='old',label='old'),dict(key='new',label='new')])
+        self.assertEqual(summary[0]['mean_branch_length'],52.5)
+        self.assertEqual(summary[2]['mean_branch_length'],5.)
 
     def test_shared_cohort_excludes_failure_from_every_version(self):
         result,common=summarize(self.rows(),[dict(key='old',label='old'),dict(key='new',label='new')])

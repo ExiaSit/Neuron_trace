@@ -39,6 +39,9 @@ python tools/compare_reconstructions.py --config comparison/original200.json --r
 # 仅重新绘图，复用完成的数值统计
 python tools/compare_reconstructions.py --config comparison/original200.json --render-only
 
+# 从未改变的 SWC 补算结构指标（例如平均分支长度），复用 PR 和逐例图
+python tools/compare_reconstructions.py --config comparison/original200.json --refresh-structure
+
 # 独立核对保存的结果
 python tools/compare_reconstructions.py --config comparison/original200.json --verify
 ```
@@ -66,6 +69,19 @@ python tools/compare_reconstructions.py --config comparison/original200.json --v
 长度为原始最终 SWC 所有有效父子边的三维欧氏距离之和；节点数直接统计文件。
 `branches` 沿用旧代码：**末梢点数＋子节点数大于 1 的分叉点数**，根节点符合条件时也计入。
 它不是 SWC 边数，也不能单独当作重建质量指标。
+
+**平均分支长度**（`mean_branch_length`，µm）：将根节点或分叉点至下一个分叉点或
+末梢点之间的完整路径作为一个分支段，沿三维父子边累加长度，再求段长的算术平均。
+每条边恰好归属一个分支段；根节点发出的各段分别计算，多根森林按各棵树统计。
+不额外排除胞体范围，不把相邻采样节点之间的一条边当作完整分支。
+无边的单节点树段数与均长均记为 0；包含零长度边的分支仍计入段数。
+逐例 CSV 同时保存实际分支段数 `branch_segments`，它与历史 `branches` 的定义不同。
+
+汇总表中的 `mean_branch_length` 为**先求每个细胞的平均分支长度，再对有效细胞等权平均**，
+不是把不同细胞的所有分支混在一起平均，也不是各版本平均总长度除以平均历史分枝数。
+主图、配对差值及 bootstrap 使用与其他指标相同的共同有效样本；原有指标定义保持不变。
+`--refresh-structure` 在确认 SWC 的 SHA-256 与缓存一致后补算结构指标，
+不重跑重建或 PR；程序会重新生成 CSV、统计图、网页汇总、配对统计并执行独立核对。
 
 PR 先按旧实现以 1 µm 重采样。Precision 为胞体范围之外、同时满足 `SNR > 2`
 和局部线性度 `> 0.6` 的节点比例；胞体排除半径沿用根节点半径加 2 µm。

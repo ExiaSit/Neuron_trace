@@ -220,6 +220,7 @@ def main():
     parser.add_argument('--config',type=Path,default=ROOT/'comparison/original200.json')
     parser.add_argument('--check',action='store_true');parser.add_argument('--run',action='store_true');parser.add_argument('--report',action='store_true')
     parser.add_argument('--render-only',action='store_true',help='Redraw figures from completed metrics without recomputing PR')
+    parser.add_argument('--refresh-structure',action='store_true',help='Refresh structural metrics from unchanged SWCs; reuse cached PR and existing MIPs')
     parser.add_argument('--verify',action='store_true',help='Verify saved metrics, cohort, coordinates, figures and historical compatibility')
     parser.add_argument('--case');parser.add_argument('--stage',choices=STAGES)
     args=parser.parse_args();cfg=configuration(args.config)
@@ -227,6 +228,10 @@ def main():
         if not args.stage:parser.error('--case requires --stage')
         stage_worker(cfg,args.case,args.stage);return
     if args.check:prepare(cfg,lightweight=True);return
+    if args.refresh_structure:
+        from reconstruction_comparison.report import refresh_structure
+        from reconstruction_comparison.audit import verify
+        refresh_structure(cfg);verify(cfg);return
     if args.verify:
         from reconstruction_comparison.audit import verify
         verify(cfg);return

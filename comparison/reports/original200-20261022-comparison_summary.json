@@ -217,6 +217,7 @@
       "mean_precision": 0.8222609482752108,
       "mean_recall": 0.4603389101887252,
       "mean_snr": 10.261326849240522,
+      "mean_branch_length": 22.984115074010777,
       "total_length": 113237.66733832889,
       "total_branches": 5604.0,
       "total_nodes": 18603.0
@@ -232,6 +233,7 @@
       "mean_precision": 0.916622318365973,
       "mean_recall": 0.5211804598397753,
       "mean_snr": 10.837979122235533,
+      "mean_branch_length": 11.081985660343294,
       "total_length": 145731.23026540884,
       "total_branches": 22050.0,
       "total_nodes": 129683.0
@@ -247,6 +249,7 @@
       "mean_precision": 0.9120712819000693,
       "mean_recall": 0.4492817340707072,
       "mean_snr": 11.002748533711397,
+      "mean_branch_length": 23.29829854977471,
       "total_length": 119315.60415623183,
       "total_branches": 5821.0,
       "total_nodes": 122671.0
@@ -262,6 +265,7 @@
       "mean_precision": 0.8830145354866094,
       "mean_recall": 0.45076886653056236,
       "mean_snr": 10.416031462275026,
+      "mean_branch_length": 20.77239312808847,
       "total_length": 144390.769382814,
       "total_branches": 7838.0,
       "total_nodes": 148932.0
@@ -277,6 +281,7 @@
       "mean_precision": 0.894155730772043,
       "mean_recall": 0.5509631120941262,
       "mean_snr": 11.620957860976384,
+      "mean_branch_length": 8.214247285855867,
       "total_length": 711866.9224099005,
       "total_branches": 121556.0,
       "total_nodes": 153112.0
@@ -292,6 +297,7 @@
       "mean_precision": 0.9156995905445049,
       "mean_recall": 0.5249185890112732,
       "mean_snr": 10.947083723903589,
+      "mean_branch_length": 9.322476256776055,
       "total_length": 143706.7214923922,
       "total_branches": 22991.0,
       "total_nodes": 156557.0
@@ -307,6 +313,7 @@
       "mean_precision": 0.8276849863321021,
       "mean_recall": 0.455334058683659,
       "mean_snr": 10.323258881784474,
+      "mean_branch_length": 22.914001834563432,
       "total_length": 111785.83511994152,
       "total_branches": 5533.0,
       "total_nodes": 18343.0
@@ -322,6 +329,7 @@
       "mean_precision": 0.9190176192601875,
       "mean_recall": 0.5206328091194239,
       "mean_snr": 10.855139085195338,
+      "mean_branch_length": 10.957434984987742,
       "total_length": 142769.22391402614,
       "total_branches": 21541.0,
       "total_nodes": 126665.0
@@ -337,6 +345,7 @@
       "mean_precision": 0.9148390980209458,
       "mean_recall": 0.44663337677664106,
       "mean_snr": 11.022501114245602,
+      "mean_branch_length": 23.304789515427615,
       "total_length": 116942.86023527756,
       "total_branches": 5714.0,
       "total_nodes": 120239.0
@@ -352,6 +361,7 @@
       "mean_precision": 0.8844730697718813,
       "mean_recall": 0.44939617275830046,
       "mean_snr": 10.441317457624644,
+      "mean_branch_length": 20.82610146636247,
       "total_length": 142533.69454732165,
       "total_branches": 7756.0,
       "total_nodes": 147026.0
@@ -367,6 +377,7 @@
       "mean_precision": 0.8950740222932841,
       "mean_recall": 0.5490980771618588,
       "mean_snr": 11.630908076188923,
+      "mean_branch_length": 8.226683073330827,
       "total_length": 700929.8232899932,
       "total_branches": 119803.0,
       "total_nodes": 150839.0
@@ -382,6 +393,7 @@
       "mean_precision": 0.9156995905445049,
       "mean_recall": 0.5249185890112732,
       "mean_snr": 10.947083723903589,
+      "mean_branch_length": 9.322476256776055,
       "total_length": 143706.7214923922,
       "total_branches": 22991.0,
       "total_nodes": 156557.0

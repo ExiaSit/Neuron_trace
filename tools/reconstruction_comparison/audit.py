@@ -1,13 +1,14 @@
 """Independent integrity checks for the saved comparison, including failures."""
 import csv
+from collections import Counter
 import json
 import math
 from pathlib import Path
 import re
 import numpy as np
 from PIL import Image
-from .metrics import read_swc
-from .report import save,sha,summarize,validate_topology,write_csv,write_text_report
+from .metrics import read_swc,swc_total_length
+from .report import METRICS,save,sha,summarize,validate_topology,write_csv,write_text_report
 
 
 def verify(cfg):
@@ -40,6 +41,13 @@ def verify(cfg):
         path=Path(row['swc_path']);assert sha(path)==row['swc_sha256']
         swc=read_swc(path);validate_topology(swc)
         assert all(math.isfinite(value) for node in swc.nodes.values() for value in node)
+        # Independently contract non-root degree-two nodes to count segments.
+        children=Counter(swc.parents.values())
+        edges=sum(p!=-1 for p in swc.parents.values())
+        segments=edges-sum(p!=-1 and children[node]==1 for node,p in swc.parents.items())
+        length=swc_total_length(swc)[0]
+        assert int(row['branch_segments'])==segments,(row['id'],'branch segments')
+        assert math.isclose(float(row['mean_branch_length']),length/segments if segments else 0.,rel_tol=1e-12,abs_tol=1e-9)
         checked_swcs+=1
         if row['version_key'] in ('v082_gsdt','app2_current'):
             assert sum(p==-1 for p in swc.parents.values())==1
@@ -50,14 +58,14 @@ def verify(cfg):
     numeric=[]
     for row in rows:
         rec=dict(row)
-        for k in ('length','branches','nodes','precision','recall','mean_snr'):
+        for k in METRICS:
             if row.get(k):rec[k]=float(row[k])
         numeric.append(rec)
     recalculated,common=summarize(numeric,cfg['versions'])
     assert common==summary['paired_ids'] and len(common)==summary['paired_count']
     for a,b in zip(recalculated,summary['summary']):
         assert a['count']==b['count']
-        for key in ('mean_length','total_length','mean_branches','mean_nodes','mean_precision','mean_recall','mean_snr'):
+        for key in ('mean_length','total_length','mean_branches','mean_branch_length','mean_nodes','mean_precision','mean_recall','mean_snr'):
             assert a[key] is None and b[key] is None or math.isclose(a[key],b[key],rel_tol=1e-12,abs_tol=1e-6)
     old_csv=Path(cfg['reference_root'])/'precision_recall_with_app2.csv'
     old={(r['id'],r['version']):r for r in csv.DictReader(old_csv.open())}
@@ -80,7 +88,7 @@ def verify(cfg):
     report=dict(validation_passed=True,cohort_count=len(ids),analysed_count=summary['analyzed'],
         reconstruction_succeeded=len(ids)-len(failed),reconstruction_failed=len(failed),failures=failed,
         paired_count=len(common),legacy_records_reproduced=legacy_count,legacy_metric_max_abs_difference=maxima,
-        valid_metric_swc_files=checked_swcs,new_image_coordinate_swcs=new_coordinates,
+        valid_metric_swc_files=checked_swcs,branch_length_records_verified=checked_swcs,new_image_coordinate_swcs=new_coordinates,
         input_files_verified=source_count,input_stat_unchanged=stat_verified,input_rehashed=rehash_verified,
         valid_comparison_pngs=len(ids),valid_summary_pngs=1,valid_html_links=len(links),
         pipeline_source_unchanged=True,comparison_code_sha256={p.name:sha(p) for p in method_dir.glob('*.py')},

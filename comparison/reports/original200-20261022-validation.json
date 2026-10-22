@@ -35,6 +35,7 @@
     "mean_snr": 0.0
   },
   "valid_metric_swc_files": 1196,
+  "branch_length_records_verified": 1196,
   "new_image_coordinate_swcs": 397,
   "input_files_verified": 800,
   "input_stat_unchanged": 800,
@@ -44,10 +45,10 @@
   "valid_html_links": 1403,
   "pipeline_source_unchanged": true,
   "comparison_code_sha256": {
-    "audit.py": "3b26fad81d476c9def6ae0b0e677af5c2b156ca34e0c5dc1d9fe92b285ade8f0",
+    "audit.py": "d9b3eb119b7aa4ea54df33b546c899c03c67a2fc747e3c47f84f30fb778ec80a",
     "legacy_prec_rec.py": "0ce77e52fe8473576f77578d2b1d383f39fd6c45e0a9ad890d5f3e454d558507",
     "metrics.py": "0467dcdec9797a5c4c14891c33007c1a03a1c067d72b09952cb6155ca4251aac",
-    "report.py": "037fb9b3af669670fa8778803e6c3a7a4f2a677c8dea781f7f538a982bee924b",
+    "report.py": "f508ab4fe93876674257f08e64bf1e131a94a7dcff33af4046353ec0375d4dde",
     "__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   "note": "Integrity validation passed. This does not mean all reconstructions succeeded or establish accuracy against manual truth."
