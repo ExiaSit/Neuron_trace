@@ -1,0 +1,60 @@
+{
+  "cohort_csv": "cohorts/original200_archived_app2.csv",
+  "reference_root": "/data/disk2/compare_v0.82_original200",
+  "output_root": "/data/disk2/compare_v0.82_archived_app2_original200_20261022",
+  "pipeline_config": "../config.json",
+  "workers": 6,
+  "gcut_workers": 2,
+  "analysis_workers": 8,
+  "stage_timeout_seconds": 1800,
+  "reference_thread": "codex://threads/019f1b48-6d93-7441-89fe-d19646a47d2d?hostId=remote-ssh-discovered%3Ashiyanshi",
+  "input_alias_root": "/media/pzy/U-Disk2/human_reconstruction",
+  "versions": [
+    {
+      "key": "v07",
+      "label": "v0.7",
+      "legacy_label": "v0.7",
+      "swc_root": "/data/disk3/v0.7/ok",
+      "template": "{id}.swc"
+    },
+    {
+      "key": "v08",
+      "label": "v0.8",
+      "legacy_label": "v0.8",
+      "swc_root": "/data/disk3/v0.8/swc",
+      "template": "{id}.swc"
+    },
+    {
+      "key": "v081",
+      "label": "v0.81 historical",
+      "legacy_label": "v0.81",
+      "swc_root": "/data/disk/v0.81/swc",
+      "template": "{id}.swc"
+    },
+    {
+      "key": "v082_historical",
+      "label": "v0.82 historical (Y fixed)",
+      "legacy_label": "v0.82",
+      "swc_root": "/data/disk2/compare_v0.82_original200/pruning_swcs",
+      "template": "{id}.swc"
+    },
+    {
+      "key": "app2_current",
+      "label": "Archived APP2 (fixed input)",
+      "product": "trace_app2/down_sampled_swcs_app2",
+      "template": "image_{id}.swc"
+    },
+    {
+      "key": "v082_gsdt",
+      "label": "v0.82 GSDT (archived APP2)",
+      "product": "gcut_pruned/pruning_swcs",
+      "template": "image_{id}.swc"
+    }
+  ],
+  "app2_input_mode": "archived_native",
+  "primary_reference_key": "v07",
+  "report_title": "固定历史 APP2：完整原始 200 例",
+  "chart_title": "Archived APP2 fixed input: original 200 | {count} shared valid cases",
+  "protocol_note": "完整复用原始固定 200 例的历史 APP2：B4.5 75 例、C6.0 104 例、120_130k 21 例。历史 SWC 仅转换 Y=H-1-Y，保留原始起点、结构、半径和所有根；不运行 APP2、不修改 marker、不做 mask 补全。当前 v0.82 执行 G-Cut、重采样和剪枝。扩展至 200 例时，经代码、参数、输入和输出哈希核对后复用前 179 例的终态结果，仅补跑另外 21 例；保留已有失败。历史最终结果的输入谱系并非逐例独立验证，不能将全部差异归因于 G-Cut 或 GSDT。",
+  "reuse_from": "/data/disk2/compare_v0.82_archived_app2_179_20261022"
+}

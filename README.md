@@ -222,3 +222,13 @@ python tools/compare_reconstructions.py --config comparison/original200.json
 
 2026-10-22 的 200 例已全部尝试，197 例完成重建；共同有效样本 197 例。
 完整记录与失败原因见 [comparison/reports/original200-20261022.md](comparison/reports/original200-20261022.md)。
+
+复用历史 APP2 的完整 200 例比较另用以下配置，跳过 APP2 重建，仅导入旧 SWC 后运行
+G-Cut、重采样和剪枝。使用 B4.5、C6.0 和 120_130k 三个数据源，输入路径及哈希随固定样本保存。
+
+```bash
+python tools/compare_reconstructions.py --config comparison/original200_archived_app2.json
+```
+
+本批 199 例成功、1 例失败，共同有效 199 例；扩展时核对并复用初批 179 例，只补跑其余 21 例。
+详情见 [历史 APP2 固定输入报告](comparison/reports/archived-app2-original200-20261022.md)。

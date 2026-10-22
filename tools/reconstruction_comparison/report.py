@@ -164,7 +164,7 @@ def evaluate_one(cfg,cid):
     return rows
 
 
-def charts(summary,out):
+def charts(summary,out,figure_title=None):
     paired=[r for r in summary if r['scope']=='paired_all_versions'];labels=[r['version'].replace(' historical','\nhistorical').replace(' current','\ncurrent') for r in paired]
     fig,axes=plt.subplots(2,4,figsize=(21,10),dpi=160)
     items=[('mean_length','Mean length (um)'),('total_length','Total length (um)'),('mean_branches','Mean critical-point branch count'),('mean_nodes','Mean SWC nodes'),
@@ -178,7 +178,7 @@ def charts(summary,out):
         ax.set_ylim(0,1.1 if key in ('mean_precision','mean_recall') else max(max(values)*1.22,1.))
         ax.grid(axis='y',alpha=.2);ax.set_axisbelow(True)
     count=paired[0]['count'] if paired else 0
-    fig.suptitle(f'Original 200 cohort: {count} shared valid cases | current v0.82 GSDT vs historical versions')
+    fig.suptitle(figure_title.format(count=count) if figure_title else f'Original 200 cohort: {count} shared valid cases | current v0.82 GSDT vs historical versions')
     fig.tight_layout();fig.savefig(out/'summary_metrics.png');plt.close(fig)
 
 
@@ -202,11 +202,13 @@ def gallery(cfg,rows,summary,common,complete):
                 if not link.exists():link.symlink_to(Path(r['swc_path']).resolve())
                 links.append(f'<a href="swc_links/{r["version_key"]}/{cid}.swc">{html.escape(r["version"])} SWC</a>')
         cards.append(f'<section id="cell-{cid}"><h2>{cid}</h2><p>{status}</p><img loading="lazy" src="comparisons/{cid}.png"><p>'+ ' | '.join(links)+'</p></section>')
+    requested=sum(1 for _ in csv.DictReader(Path(cfg['cohort_csv']).open()))
     page='''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>v0.82 GSDT 固定样本比较</title>
 <style>body{font:15px system-ui;margin:24px;background:#eee;color:#222}section,header{background:white;padding:18px;margin-bottom:20px}img{max-width:100%}table{border-collapse:collapse}th,td{padding:8px;border:1px solid #bbb;text-align:right}th:first-child,td:first-child{text-align:left}a{color:#155b96}input{padding:7px}section:target{outline:3px solid #218eaa}</style>
-<header><h1>v0.82 GSDT 与历史版本：固定原始 200 例</h1>'''
-    page+=f'<p>当前已分析 {len(by_id)}/200 例；共同有效 {len(common)} 例；状态：'+('已完成' if complete else '计算中')+'</p>'
-    page+='<p>历史 v0.82 指参考会话中修正 Y 坐标后的旧版；当前版是本次 Git 分支 v0.82 的 GSDT 流程，使用原始 mask，不做 mask 补全。APP2 为本次重新生成的剪枝前输出。</p>'
+<header>'''
+    page+='<h1>'+html.escape(cfg.get('report_title','v0.82 GSDT 与历史版本：固定原始 200 例'))+'</h1>'
+    page+=f'<p>当前已分析 {len(by_id)}/{requested} 例；共同有效 {len(common)} 例；状态：'+('已完成' if complete else '计算中')+'</p>'
+    page+='<p>'+html.escape(protocol_note(cfg))+'</p>'
     page+='<p>PR 沿用参考会话的固定启发式实现，不是对人工真值的准确率。节点、分枝、长度描述结构规模，不能单独作为优劣判断。</p>'
     page+='<p>平均分支长度：沿三维 SWC 将根节点/分叉点至下一分叉点/末梢点作为一段，累加路径长度；先计算每例平均值，再对共同样本等权平均。分母为实际分支段数（逐例 CSV 的 branch_segments），与旧分枝计数不同。无边树取 0。</p>'
     page+='<p><a href="summary_metrics.csv">汇总 CSV</a> | <a href="per_cell_metrics.csv">逐例 CSV</a> | <a href="paired_deltas.csv">配对差值与区间</a> | <a href="missing_or_failed.csv">缺失指标</a> | <a href="reconstruction_failures.csv">重建失败原因</a> | <a href="run_manifest.json">运行来源</a></p>'
@@ -248,7 +250,7 @@ def build(cfg):
                     partial,common=summarize(rows,cfg['versions'])
                     write_csv(out/'per_cell_metrics.csv',rows);write_csv(out/'summary_metrics.csv',partial)
                     write_csv(out/'missing_or_failed.csv',[r for r in rows if r['error']],fields=['id','version_key','version','swc_path','error'])
-                    charts(partial,out);gallery(cfg,rows,partial,common,complete=False)
+                    charts(partial,out,cfg.get('chart_title'));gallery(cfg,rows,partial,common,complete=False)
     return publish(cfg,rows,ids,errors,actual)
 
 
@@ -262,7 +264,7 @@ def publish(cfg,rows,ids,errors,actual):
     write_csv(out/'paired_deltas.csv',deltas)
     failed=[r for r in rows if r['error']]
     write_csv(out/'missing_or_failed.csv',failed,fields=['id','version_key','version','swc_path','error'])
-    charts(summary,out);gallery(cfg,rows,summary,common,complete=not errors and len({r['id'] for r in rows})==len(ids))
+    charts(summary,out,cfg.get('chart_title'));gallery(cfg,rows,summary,common,complete=not errors and len({r['id'] for r in rows})==len(ids))
     report=dict(requested=len(ids),analyzed=len({r['id'] for r in rows}),version_count=len(cfg['versions']),
                 paired_count=len(common),paired_ids=common,missing_or_failed=len(failed),analysis_errors=errors,
                 metric_sha256=actual,summary=summary)
@@ -307,7 +309,7 @@ def render_existing(cfg):
     with concurrent.futures.ProcessPoolExecutor(max_workers=int(cfg.get('analysis_workers',8))) as pool:
         list(pool.map(render_one,[cfg]*len(ids),ids))
     rows=[r for cid in ids for r in json.loads((out/'metrics'/f'{cid}.json').read_text())]
-    charts(report['summary'],out);gallery(cfg,rows,report['summary'],report['paired_ids'],complete=True)
+    charts(report['summary'],out,cfg.get('chart_title'));gallery(cfg,rows,report['summary'],report['paired_ids'],complete=True)
 
 
 def refresh_structure(cfg):
@@ -334,15 +336,21 @@ def refresh_structure(cfg):
     return publish(cfg,rows,ids,[],comparison['metric_sha256'])
 
 
+def protocol_note(cfg):
+    return cfg.get('protocol_note','历史 v0.82 指参考会话中修正 Y 坐标后的旧版；当前版是本次 Git 分支 v0.82 的 GSDT 流程，使用原始 mask，不做 mask 补全。APP2 为本次重新生成的剪枝前输出。')
+
+
 def write_text_report(cfg,comparison,validation):
     """Human-readable outcome with paired denominators and explicit failures."""
     out=Path(cfg['output_root']);count=comparison['paired_count']
     paired=[r for r in comparison['summary'] if r['scope']=='paired_all_versions']
-    lines=['# v0.82 GSDT 与历史版本：固定原始样本比较','',
+    archived=cfg.get('app2_input_mode')=='archived_native'
+    reference_key=cfg.get('primary_reference_key','v082_historical')
+    reference_label=next(v['label'] for v in cfg['versions'] if v['key']==reference_key)
+    lines=['# '+cfg.get('report_title','v0.82 GSDT 与历史版本：固定原始样本比较'),'',
        f"本次对原始 {comparison['requested']} 个编号全部尝试重建，成功 {validation['reconstruction_succeeded']} 例、失败 {validation['reconstruction_failed']} 例。{comparison['version_count']} 组结果共同有效样本为 **{count} 例**。",
-       '', '重建代码使用 v0.82 工作目录；原始 mask 直接输入 APP2，随后执行 G-Cut、重采样和剪枝。没有运行 mask 补全。',
-       '历史 v0.82 是参考会话中修正 Y 坐标后的旧结果；本次 v0.82 为 GSDT 版。两者名称相同但流程不同。',
-       '本次是完整版本对比，不能把全部差异单独归因于 GSDT。APP2 列为本次重跑的剪枝前结构。','',
+       '', protocol_note(cfg),
+       '本次包含 G-Cut、重采样和剪枝，不能把全部差异单独归因于 GSDT。历史最终结果列沿用原报告；不宣称所有历史版本均使用同一份 APP2 输入。','',
        f'## 共同有效 {count} 例','',
        '| 版本 | 平均长度 µm | 总长度 µm | 平均分枝数 | 平均分支长度 µm | 平均节点数 | 历史 Precision | 历史 Recall | SNR |',
        '|---|---:|---:|---:|---:|---:|---:|---:|---:|']
@@ -350,12 +358,12 @@ def write_text_report(cfg,comparison,validation):
         lines.append(f"| {r['version']} | {r['mean_length']:.3f} | {r['total_length']:.3f} | {r['mean_branches']:.3f} | {r['mean_branch_length']:.3f} | {r['mean_nodes']:.3f} | {r['mean_precision']:.6f} | {r['mean_recall']:.6f} | {r['mean_snr']:.6f} |")
     lines+=['','平均分支长度以根节点/分叉点至下一分叉点/末梢点的三维路径为一段；先计算每例的段长均值，再对细胞等权平均。',
        '逐例字段 `branch_segments` 为实际分支段数，与历史“末梢＋分叉点”的 `branches` 不同；无边树的段数与均长均为 0。']
-    lines+=['','## 与历史 v0.82 的配对变化','',
+    lines+=['','## 与 '+reference_label+' 的配对变化','',
        '以同一细胞为单位计算“当前版 − 历史版”。bootstrap 为本批样本的描述性区间。','',
        '| 指标 | 平均变化 | 95% bootstrap 区间 | 增加 / 减少 / 不变例数 |','|---|---:|---|---|']
     with (out/'paired_deltas.csv').open() as f:delta=list(csv.DictReader(f))
     for r in delta:
-        if r['reference'].startswith('v0.82'):
+        if r['reference']==reference_label:
             lines.append(f"| {r['metric']} | {float(r['mean_delta']):.6f} | [{float(r['bootstrap_95_low']):.6f}, {float(r['bootstrap_95_high']):.6f}] | {r['increased']} / {r['decreased']} / {r['unchanged']} |")
     lines+=['','PR 沿用固定的历史图像启发式实现，不是人工真值准确率。分枝数、节点数和长度描述结构规模；分枝增多不能单独解释为重建更准确。',
        '旧 Recall 的端点检查位置仍会随 SWC 改变，因此不能用它单独证明真实完整性。','',
@@ -382,4 +390,10 @@ def write_text_report(cfg,comparison,validation):
        '- `reconstruction_failures.csv`、`missing_or_failed.csv`：失败与缺失。',
        '- `run_manifest.json`、`validation.json`：来源、哈希和独立核对。',
        '- 可复用方法、固定样本清单和运行参数已保存在 Git 的 `comparison/` 与 `tools/reconstruction_comparison/`。']
+    if archived:
+        lines+=['','## 固定 APP2 核对','',
+            f"- {validation['archived_app2_imports_verified']} 份历史 APP2 的导入已核对：仅 Y=H−1−Y，节点、父子关系、X/Z、半径和所有根节点保持一致。",
+            '- 未重跑 APP2，未修改输入文件，没有对现成 SWC 应用 marker 的 +2 偏移。']
+        if validation.get('reused_cases_verified'):
+            lines += [f"- 复用 {validation['reused_cases_verified']} 例，新增处理 {validation['newly_processed_cases']} 例；核对 {validation['reused_stage_files_verified']} 份阶段文件哈希及 {validation['reused_metric_records_verified']} 条复用案例的有效指标记录，均与先前结果一致。"]
     (out/'report.md').write_text('\n'.join(lines)+'\n')

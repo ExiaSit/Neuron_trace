@@ -117,5 +117,80 @@ class ComparisonMethods(unittest.TestCase):
         path=ROOT/'tools/reconstruction_comparison/legacy_prec_rec.py'
         self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(),manifest['legacy_prec_rec_sha256'])
 
+    def test_archived_app2_import_preserves_tree_and_never_moves_seed(self):
+        from reconstruction_comparison.archived_app2 import convert
+        with tempfile.TemporaryDirectory() as folder:
+            source=Path(folder)/'native.swc';destination=Path(folder)/'image.swc'
+            source.write_text('# native\n0 1 3 4 5 2 -1\n2 3 6 7 8 1 0\n9 1 2 3 4 5 -1\n')
+            before=source.read_bytes();a=read_swc(source)
+            convert(source,destination,20);b=read_swc(destination)
+            self.assertEqual(a.parents,b.parents)
+            self.assertEqual(b.nodes[0],(3.,15.,5.,2.))
+            self.assertEqual(b.nodes[9],(2.,16.,4.,5.))
+            self.assertEqual(swc_total_length(a),swc_total_length(b))
+            self.assertEqual(source.read_bytes(),before)
+            convert(source,destination,20)  # Matching import is resumable.
+
+    def test_archived_app2_import_rejects_double_conversion_and_overwrite(self):
+        from reconstruction_comparison.archived_app2 import convert
+        with tempfile.TemporaryDirectory() as folder:
+            source=Path(folder)/'native.swc';destination=Path(folder)/'image.swc'
+            source.write_text('1 1 3 4 5 2 -1\n')
+            with self.assertRaisesRegex(ValueError,'overwritten'):convert(source,source,20)
+            convert(source,destination,20)
+            with self.assertRaisesRegex(ValueError,'another Y flip'):convert(destination,Path(folder)/'twice.swc',20)
+            with self.assertRaisesRegex(ValueError,'Conflicting'):convert(source,destination,21)
+
+    def test_archived_app2_mode_disables_retracing(self):
+        self.assertEqual(driver.stages({'app2_input_mode':'archived_native'}),('import_app2','gcut','gcut_resample','prune'))
+        self.assertEqual(driver.stages({}),driver.STAGES)
+        with self.assertRaisesRegex(ValueError,'Unknown'):driver.stages({'app2_input_mode':'typo'})
+
+    def test_archived_app2_worker_checks_source_hash_before_import(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);(root/'manifests').mkdir()
+            source=root/'native.swc';source.write_text('1 1 3 4 5 2 -1\n')
+            record=dict(inputs={'archived_app2':str(source)},input_sha256={'archived_app2':driver.sha(source)},shape=[10,20,30])
+            (root/'manifests/1.json').write_text(json.dumps(record))
+            cfg=dict(output_root=str(root),app2_input_mode='archived_native')
+            driver.stage_worker(cfg,'1','import_app2')
+            self.assertTrue((root/'reconstruction/trace_app2/down_sampled_swcs_app2/image_1.swc').is_file())
+            source.write_text('1 1 9 4 5 2 -1\n')
+            with self.assertRaisesRegex(ValueError,'changed since preflight'):driver.stage_worker(cfg,'1','import_app2')
+            with self.assertRaisesRegex(ValueError,'disabled'):driver.stage_worker(cfg,'1','app2_trace')
+
+    def test_reuse_requires_identical_processing_parameters(self):
+        from reconstruction_comparison.reuse import processing_config
+        a=dict(output_root='a',neuron_ids=[1],metadata_file='a.csv',gcut={'threshold':2})
+        b=dict(output_root='b',neuron_ids=[1,2],metadata_file='b.csv',gcut={'threshold':2})
+        self.assertEqual(processing_config(a),processing_config(b))
+        b['gcut']['threshold']=3
+        self.assertNotEqual(processing_config(a),processing_config(b))
+
+    def test_cohort_extension_preserves_failed_case_and_copy_integrity(self):
+        from reconstruction_comparison.reuse import adopt
+        with tempfile.TemporaryDirectory() as folder:
+            source=Path(folder)/'old';out=Path(folder)/'new';source.mkdir();out.mkdir()
+            for root,fingerprint in [(source,'old'),(out,'new')]:
+                driver.save(root/'run_manifest.json',dict(fingerprint=fingerprint,code={'test.py':'digest'},stages=['import_app2','gcut','gcut_resample','prune']))
+                driver.save(root/'pipeline_config.json',dict(output_root=str(root),neuron_ids=[1],metadata_file=str(root/'meta.csv'),gcut={'value':1}))
+            driver.save(source/'validation.json',dict(validation_passed=True))
+            rec=dict(id='1',input_sha256={'archived_app2':'pinned'},metadata={'soma_x':3},shape=[10,20,30],crop_for_v081={})
+            driver.save(source/'manifests/1.json',rec)
+            driver.save(source/'status/1.json',dict(id='1',fingerprint='old',state='failed',current_stage='prune',completed_stages=['import_app2','gcut','gcut_resample'],seconds={}))
+            (source/'logs/1').mkdir(parents=True);(source/'logs/1/prune.log').write_text('source failure\n')
+            paths=['trace_app2/down_sampled_swcs_app2/image_1.swc','gcut_output/selected_for_pruning/image_1.swc','gcut_output/selected_resampled_step1/image_1.swc']
+            for relative in paths:
+                p=source/'reconstruction'/relative;p.parent.mkdir(parents=True,exist_ok=True);p.write_text('1 1 3 4 5 2 -1\n')
+            p=source/'reconstruction'/paths[0]
+            driver.save(source/'metrics/1.json',[dict(version_key='app2_current',error='',swc_path=str(p),swc_sha256=driver.sha(p))])
+            cfg=dict(reuse_from=str(source),output_root=str(out),app2_input_mode='archived_native',workers=1)
+            adopt(cfg,[rec]);adopt(cfg,[rec])  # Resuming must keep the reuse record.
+            self.assertEqual(json.loads((out/'reuse_manifest.json').read_text())['reused_count'],1)
+            for relative in paths:self.assertEqual((source/'reconstruction'/relative).read_bytes(),(out/'reconstruction'/relative).read_bytes())
+            result=driver.reconstruct(cfg,[rec])
+            self.assertEqual(result[0]['state'],'failed')
+            self.assertEqual(result[0]['reused_from'],str(source))
+
 
 if __name__=='__main__':unittest.main()

@@ -1,0 +1,50 @@
+{
+  "validation_passed": true,
+  "cohort_count": 200,
+  "analysed_count": 200,
+  "reconstruction_succeeded": 199,
+  "reconstruction_failed": 1,
+  "failures": [
+    {
+      "id": "86054",
+      "stage": "prune",
+      "reason": "stage_prune.SomaOnlySWCError: SWC 只有一个 Soma 节点，没有任何神经突节点：node_id=1, type=1, parent=-1",
+      "log_path": "/data/disk2/compare_v0.82_archived_app2_original200_20261022/logs/86054/prune.log"
+    }
+  ],
+  "paired_count": 199,
+  "legacy_records_reproduced": 799,
+  "legacy_metric_max_abs_difference": {
+    "length": 0.0,
+    "nodes": 0.0,
+    "branches": 0.0,
+    "precision": 0.0,
+    "recall": 0.0,
+    "mean_snr": 0.0
+  },
+  "valid_metric_swc_files": 1198,
+  "branch_length_records_verified": 1198,
+  "new_image_coordinate_swcs": 399,
+  "archived_app2_imports_verified": 200,
+  "reused_cases_verified": 179,
+  "reused_stage_files_verified": 715,
+  "reused_metric_records_verified": 1072,
+  "newly_processed_cases": 21,
+  "input_files_verified": 1000,
+  "input_stat_unchanged": 1000,
+  "input_rehashed": 0,
+  "valid_comparison_pngs": 200,
+  "valid_summary_pngs": 1,
+  "valid_html_links": 1405,
+  "pipeline_source_unchanged": true,
+  "comparison_code_sha256": {
+    "archived_app2.py": "628de3273ac09c35c498685d5378eed61b0c71f0746d79425650fc677f2b56b6",
+    "audit.py": "67eee42b3ecb3f4f39e7c9f52139b25652c3c21a95019b7dd658e6a46547ee4c",
+    "legacy_prec_rec.py": "0ce77e52fe8473576f77578d2b1d383f39fd6c45e0a9ad890d5f3e454d558507",
+    "metrics.py": "0467dcdec9797a5c4c14891c33007c1a03a1c067d72b09952cb6155ca4251aac",
+    "report.py": "d82ee054780d64c7fa4b09da08f5bf25ec4cf36b84c67b783ed3a29e66768fc5",
+    "reuse.py": "8c136f14f2e06d90cd3c29ef27a4006bbda2e9021167084aa1392b2f6b6f9368",
+    "__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "note": "Integrity validation passed. This does not mean all reconstructions succeeded or establish accuracy against manual truth."
+}

@@ -1,0 +1,2 @@
+id,stage,reason,log_path
+86054,prune,"stage_prune.SomaOnlySWCError: SWC 只有一个 Soma 节点，没有任何神经突节点：node_id=1, type=1, parent=-1",/data/disk2/compare_v0.82_archived_app2_original200_20261022/logs/86054/prune.log

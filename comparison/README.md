@@ -8,6 +8,45 @@
 2026-10-13 修正 Y 坐标后的结果。它们在图表中使用不同标签。
 这是整套流程的历史版本比较，包含原始 mask 和 APP2/剪枝流程的差别，**不能把全部变化归因于 GSDT**。
 
+## 固定已生成的历史 APP2
+
+用户于 2026-10-22 确认的历史 APP2 来源为：
+
+- `/data/disk2/B4.5/trace_app2/down_sampled_swcs_app2`：原始样本中的 75 例。
+- `/data/disk/C6.0/trace_app2/down_sampled_swcs_app2`：原始样本中的 104 例。
+- `/data/disk3/120_130k/trace_app2/down_sampled_swcs_app2`：用户随后要求补入的其余 21 例。
+
+`cohorts/original200_archived_app2.csv` 固定完整 200 个原始编号、输入路径和 SWC SHA-256，
+不补抽或替换编号。首次只确认两个目录时的 179 例清单和当时剩余的 21 例清单分别保存在
+`cohorts/original200_confirmed_archived_app2.csv` 和 `cohorts/original200_archived_app2_excluded.csv`，
+仅用于记录初批范围；最终 200 例比较没有排除这 21 例。
+`archived_app2_provenance.json` 保存源文件哈希、根节点、树结构检查及 v0.7 汇总来源记录。
+
+```bash
+/home/pzy/anaconda3/envs/hb_seg/bin/python tools/compare_reconstructions.py \
+  --config comparison/original200_archived_app2.json
+```
+
+此配置设置 `app2_input_mode=archived_native`，执行历史 SWC 导入 → G-Cut → 重采样 → 剪枝，
+**不执行 APP2 重建或 mask 补全**，使用当前工作目录代码。其他配置默认仍重跑 APP2。
+导入只将原始 Vaa3D SWC 的 Y 转为 `H-1-Y`，在独立输出副本中操作；不调整 X/Z、
+半径、起点、节点、父子关系或多个根节点，也不对现成 SWC 使用 marker 的 `+2` 补偿。
+每次运行核对源文件哈希，独立验证会逐节点确认导入关系与总长度一致；续跑拒绝混入其他输入。
+
+完整 200 例配置的 `reuse_from` 指向已完成的 179 例运行目录。程序只在流水线代码、
+处理参数及逐例输入哈希、胞体元数据、图像尺寸、裁剪记录一致时复用终态结果。
+核心阶段文件独立复制并记录哈希，诊断目录链接到原运行；已有失败作为终态保留，不重试或替换。
+`reuse_manifest.json` 保存来源、阶段文件哈希与案例状态。最终验证还将复用案例的全部指标
+与旧运行逐项比较，保证扩充样本不会改变原 179 例的数值。
+如果从头运行完整 200 例，删除配置中的可选 `reuse_from` 项；初批 179 例配置另存为
+`original179_archived_app2.json`。
+
+历史 v0.7 汇总包含多个来源。这里按用户确认的历史 APP2 固定当前 v0.82 的输入，
+但未逐例证明它们就是每份旧版最终 SWC 的直接输入，因而不能宣称这是所有历史算法
+均使用相同输入的严格消融实验；它可用于观察当前后续流程处理这批旧 APP2 的效果。
+表格同时列出 v0.7、v0.8、历史 v0.81、历史 v0.82、固定 APP2 和当前 v0.82 的输出。
+主图、配对差值和平均分支长度继续使用所有列共同有效的编号，失败和 PR 不可用案例单列。
+
 ## 运行
 
 先准备项目本机 `config.json`（环境配置见项目 README），再编辑本目录的

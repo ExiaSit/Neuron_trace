@@ -23,6 +23,13 @@ ROOT = Path(__file__).resolve().parents[1]
 STAGES = ('app2_trace', 'gcut', 'gcut_resample', 'prune')
 
 
+def stages(cfg):
+    mode=cfg.get('app2_input_mode','retrace')
+    if mode=='retrace':return STAGES
+    if mode=='archived_native':return ('import_app2', *STAGES[1:])
+    raise ValueError('Unknown APP2 input mode: '+mode)
+
+
 def save(path, value):
     path = Path(path);path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix('.writing.json')
@@ -42,6 +49,9 @@ def configuration(path):
     for key in ('cohort_csv','reference_root','output_root','pipeline_config','input_alias_root'):
         p = Path(cfg[key]).expanduser();cfg[key] = str(p if p.is_absolute() else (path.parent/p).resolve())
     cfg['config_path'] = str(path)
+    if cfg.get('reuse_from'):
+        p=Path(cfg['reuse_from']).expanduser();cfg['reuse_from']=str(p if p.is_absolute() else (path.parent/p).resolve())
+    stages(cfg)  # Validate before preparing or writing outputs.
     for version in cfg.get('versions',[]):
         if 'swc_root' in version:
             p=Path(version['swc_root']).expanduser()
@@ -122,9 +132,17 @@ def prepare(cfg, lightweight=False):
             crop,order=normalize_crop(json.loads(inputs['crop'].read_text()),soma_shape)
             rec=dict(id=cid,inputs={k:str(p) for k,p in inputs.items()},metadata=spec['metadata'],
                      shape=list(shape),source_crop_order=order,crop_for_v081=crop)
+            if cfg.get('app2_input_mode')=='archived_native':
+                from reconstruction_comparison.metrics import read_swc
+                from reconstruction_comparison.report import validate_topology
+                source=Path(row['archived_app2_swc_path']).resolve()
+                validate_topology(read_swc(source))
+                inputs['archived_app2']=source;rec['inputs']['archived_app2']=str(source)
             if not lightweight:
                 rec['input_sha256']={k:sha(p) for k,p in inputs.items()}
                 rec['input_stat']={k:dict(size=p.stat().st_size,mtime_ns=p.stat().st_mtime_ns) for k,p in inputs.items()}
+                if row.get('archived_app2_sha256') and rec['input_sha256'].get('archived_app2')!=row['archived_app2_sha256']:
+                    raise ValueError('Archived APP2 does not match the registered cohort hash')
             records.append(rec)
         except Exception as exc:errors.append(dict(id=cid,error=str(exc)))
     preflight=dict(requested=len(ids),ready=len(records),errors=errors,ids=ids)
@@ -135,12 +153,15 @@ def prepare(cfg, lightweight=False):
     reconstruction=out/'reconstruction'
     cfg_pipeline=json.loads(Path(cfg['pipeline_config']).read_text())
     cfg_pipeline.update(output_root=str(reconstruction),neuron_ids=list(map(int,ids)),metadata_file=str(out/'cohort_metadata.csv'))
-    cfg_pipeline['enabled_stages']={s:s in STAGES for s in ('rescale','soma_crop','soma_infer','neurite_infer','merge',*STAGES)}
+    cfg_pipeline['enabled_stages']={s:s in stages(cfg) for s in ('rescale','soma_crop','soma_infer','neurite_infer','merge',*STAGES)}
     cfg_pipeline.setdefault('gcut',{}).update(candidate_method='app2_gsdt')
     code=pipeline_hashes();cohort_sha=sha(cfg['cohort_csv'])
+    if cfg.get('app2_input_mode')=='archived_native':
+        name='tools/reconstruction_comparison/archived_app2.py';code[name]=sha(ROOT/name)
     input_identity={r['id']:dict(hashes=r['input_sha256'],metadata=r['metadata']) for r in records}
-    fingerprint=hashlib.sha256(json.dumps(dict(code=code,config=cfg_pipeline,cohort=cohort_sha,
-                                              inputs=input_identity),sort_keys=True).encode()).hexdigest()
+    identity=dict(code=code,config=cfg_pipeline,cohort=cohort_sha,inputs=input_identity)
+    if cfg.get('app2_input_mode')=='archived_native':identity['stages']=stages(cfg)
+    fingerprint=hashlib.sha256(json.dumps(identity,sort_keys=True).encode()).hexdigest()
     existing=out/'run_manifest.json'
     if existing.exists() and json.loads(existing.read_text())['fingerprint']!=fingerprint:
         raise ValueError('This output directory belongs to different code/configuration; choose a fresh output_root')
@@ -158,12 +179,21 @@ def prepare(cfg, lightweight=False):
     save(existing,dict(fingerprint=fingerprint,created_at=datetime.now().astimezone().isoformat(),
          project=str(ROOT),git_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
          code=code,cohort_sha256=cohort_sha,reference_thread=cfg.get('reference_thread'),config=cfg,
-         policy='live v0.82; original masks; no mask completion; APP2/G-Cut/resample/prune recomputed; fixed cohort, no replacement'))
+         stages=stages(cfg),policy='live v0.82; original masks; no mask completion; '+
+         ('archived APP2 imported with Y=H-1-Y only; no retracing or seed correction; ' if cfg.get('app2_input_mode')=='archived_native' else 'APP2 recomputed; ')+
+         'G-Cut/resample/prune recomputed; fixed cohort, no replacement'))
     return records
 
 
 def stage_worker(cfg,cid,stage):
+    if stage not in stages(cfg):raise ValueError(f'{stage} is disabled for this input mode')
     out=Path(cfg['output_root']);rec=json.loads((out/'manifests'/f'{cid}.json').read_text())
+    if stage=='import_app2':
+        from reconstruction_comparison.archived_app2 import convert
+        source=Path(rec['inputs']['archived_app2'])
+        if sha(source)!=rec['input_sha256']['archived_app2']:raise ValueError('Archived APP2 changed since preflight')
+        convert(source,out/'reconstruction/trace_app2/down_sampled_swcs_app2'/f'image_{cid}.swc',int(rec['shape'][1]))
+        return
     os.environ['NEURON_V082_CONFIG']=str(out/'pipeline_config.json')
     sys.path.insert(0,str(ROOT))
     import pandas as pd
@@ -182,11 +212,11 @@ def reconstruct(cfg,records):
         cid=rec['id'];path=out/'status'/f'{cid}.json'
         previous=json.loads(path.read_text()) if path.exists() else {}
         if previous.get('fingerprint') not in (None,fingerprint):raise ValueError(f'{cid}: checkpoint fingerprint mismatch')
-        if previous.get('state')=='complete':return previous
+        if previous.get('state')=='complete' or (previous.get('state')=='failed' and previous.get('reused_terminal')):return previous
         state=dict(id=cid,fingerprint=fingerprint,state='running',completed_stages=previous.get('completed_stages',[]),seconds=previous.get('seconds',{}))
         started=time.monotonic()
         try:
-            for stage in STAGES:
+            for stage in stages(cfg):
                 if stage in state['completed_stages']:continue
                 state['current_stage']=stage;save(path,state)
                 stage_start=time.monotonic();log=out/'logs'/cid/(stage+'.log');log.parent.mkdir(parents=True,exist_ok=True)
@@ -222,7 +252,7 @@ def main():
     parser.add_argument('--render-only',action='store_true',help='Redraw figures from completed metrics without recomputing PR')
     parser.add_argument('--refresh-structure',action='store_true',help='Refresh structural metrics from unchanged SWCs; reuse cached PR and existing MIPs')
     parser.add_argument('--verify',action='store_true',help='Verify saved metrics, cohort, coordinates, figures and historical compatibility')
-    parser.add_argument('--case');parser.add_argument('--stage',choices=STAGES)
+    parser.add_argument('--case');parser.add_argument('--stage',choices=(*STAGES,'import_app2'))
     args=parser.parse_args();cfg=configuration(args.config)
     if args.case:
         if not args.stage:parser.error('--case requires --stage')
@@ -244,7 +274,10 @@ def main():
         out=Path(cfg['output_root']);out.mkdir(parents=True,exist_ok=True)
         with (out/'.run.lock').open('w') as lock:
             fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-            records=prepare(cfg);reconstruct(cfg,records)
+            records=prepare(cfg)
+            from reconstruction_comparison.reuse import adopt
+            adopt(cfg,records)
+            reconstruct(cfg,records)
     if args.report or default:
         from reconstruction_comparison.report import build
         build(cfg)
