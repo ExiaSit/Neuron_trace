@@ -1,0 +1,52 @@
+v0.83 网页实验工作台验证
+日期：2026-10-23，Asia/Shanghai
+
+部署：
+http://10.133.59.18:8766/
+用户服务 neuron-v083-console.service 已启动并启用。
+原 mask-reconnect-gallery.service（8765）保持运行。
+
+自动检查：
+98 项 unittest 通过（原 90 项 + 8 项控制台测试）。
+node --check web_console/static/app.js 通过。
+git diff --check 通过。
+控制台测试实际执行合成 TIFF 的 02 重采样和 03 裁剪，并检查预览图片、
+结束边界、不重复计算和输入变更拒绝。覆盖进程树停止、API 认证、跨站和
+越界路径拒绝、SWC 输入独立复制及依赖推导。
+单测中的原生 SWC 重采样被 mock；另以下面的真实任务验证原生步骤。
+
+真实样本 16984：
+A. G-Cut 至最终比较（09–13）
+  job ID：7cfabe45aaef4693
+  输入：原图库的原图、初始 mask、胞体辅助信息；导入已有修复 mask 和 APP2。
+  输出根目录：
+  /data/disk/Neuron_tracing_method/results/v083-console/jobs/7cfabe45aaef4693/reconstruction
+  09、10、11、12、13 全部完成，单步用时约 30.96、1.29、6.49、0.72、2.55 秒。
+  G-Cut 日志：short-leaf pruning (<2 nodes, soma protected): 110 -> 75 nodes。
+  生成 G-Cut 总图、剪枝总图、最终比较图及 SWC；已查看实际比较图。
+  12 的记录为 new_case_no_completed_baseline，没有历史基线替换。
+  初次测试暴露缺少 reconstruction/logs/<id> 目录，已在区间执行器统一创建，
+  上述任务为修复后实跑。首次失败记录 e83ab8628ba6407f 保留供追溯。
+
+B. 仅 mask 修复（07–07）
+  job ID：93b18b1b1a3e4b99
+  输出根目录：
+  /data/disk/Neuron_tracing_method/results/v083-console/jobs/93b18b1b1a3e4b99/reconstruction
+  用时约 94.97 秒，mask_a–mask_f 和 continuity 全部完成，status 为 mask_complete。
+  网页任务为 complete，只完成 16984:7；没有运行 APP2。
+  修复 TIFF 与 mask 前后比较图已生成。
+
+HTTP 验证：
+直接经 10.133.59.18 访问页面、JS、CSS 返回 200。
+已认证的任务/历史结果接口返回 200；16984 历史结果索引约 0.52 秒，
+列出 9 个图像/SWC/记录；任务图片下载返回 200。
+历史目录遍历已调整为先按文件名匹配 ID 再 stat，避免对全目录文件逐个查询元数据。
+使用固定内网地址和 localhost 验证时绕过环境 HTTP 代理。
+
+范围与限制：
+本轮无可连接的浏览器（cua 返回 browsers=[]），因此未进行实际浏览器布局、
+响应式布局或交互截图核验。已检查 HTML/JS、真实 HTTP 接口和实际产物。
+没有重新执行 nnUNet 推理或原始 V3D 全链路；01–06 继续调用现有算法。
+没有运行模型训练，没有全量评估重建质量。
+Web 任务串行运行，不自动排队多个实验；输入路径、模型和环境需在服务器存在。
+控制口令未写入源码或验证记录。

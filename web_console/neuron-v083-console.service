@@ -1,0 +1,22 @@
+[Unit]
+Description=Neuron v0.83 reconstruction web console
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/data/disk/Neuron_tracing_method/v0.83
+ExecStart=/home/pzy/anaconda3/envs/hb_seg/bin/python -u -m web_console.server --host 0.0.0.0 --port 8766 --state-root /data/disk/Neuron_tracing_method/results/v083-console
+Environment=OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 MPLBACKEND=Agg
+Restart=on-failure
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=15
+NoNewPrivileges=true
+Nice=5
+MemoryAccounting=yes
+MemoryHigh=96G
+MemoryMax=128G
+MemorySwapMax=0
+
+[Install]
+WantedBy=default.target
