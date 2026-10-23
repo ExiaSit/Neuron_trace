@@ -17,7 +17,7 @@ def load_config(path):
     for model in cfg.get('models',{}).values():
         model['results']=absolute(model['results'])
     cfg.setdefault('method_version','v0.83')
-    cfg.setdefault('method_revision','ring-guard-20261016')
+    cfg.setdefault('method_revision','ring-guard-20261016-short-leaves-20261023')
     cfg['direct_inputs']=True
     cfg.setdefault('baseline_root',None)
     if cfg['baseline_root'] is not None:

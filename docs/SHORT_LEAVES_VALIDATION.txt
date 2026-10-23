@@ -1,0 +1,28 @@
+v0.83 G-Cut 短末梢移植验证
+日期：2026-10-23，Asia/Shanghai
+算法修订：ring-guard-20261016-short-leaves-20261023
+
+来源：当前 v0.82 工作目录 algorithms/tracing/gcut_adapter.py（含未提交修改）。
+来源文件 SHA-256：ed6d4fe4737e168fc1f44f5a4d5e393cf465f972516e1368685ecdf557e02fbf
+目标适配器与来源文件逐字节相同。
+原 v0.83 基线提交：107efc5。
+
+变更：胞体收缩之后、G-Cut 分离之前启用原有 prune_short_leaves，
+min_leaf_branch_length=2，stable_nodes=soma_ids。按节点数而非 µm 判断，
+不计起始分叉点。每次删除后更新子节点数，保留达到两节点的剩余路径。
+mask 修复、EDT 候选、最终剪枝和历史回归保护未变。
+
+验证命令（hb_seg）：
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  /home/pzy/anaconda3/envs/hb_seg/bin/python -m unittest discover -s tests -v
+
+结果：90 项测试通过。
+新增 4 项真实 G-Cut 预处理测试：节点数与物理长度区别、兄弟分支在
+删除后的重组行为、已知胞体及连接保留、单胞体保留。
+更新 2 项旧断言：单节点长边现在删除；远端胞体仍保护，其单节点非胞体末梢删除。
+git diff --check 通过。
+
+范围：本次未重新运行真实图像全流程或 52 个历史样本，不作重建质量提升声明。
+2026-10-20 的验证和 parity 报告仍仅描述旧基线。
+历史回归保护可能恢复旧分支或选择旧基线；未关闭此保护。
+运行时应使用新的 output_root。默认与随包配置已更新算法修订号。

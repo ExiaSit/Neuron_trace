@@ -5,11 +5,24 @@ Neuron reconstruction v0.83 — 完整流程整理版
 统一配置：config.json
 推荐环境：/home/pzy/anaconda3/envs/hb_seg/bin/python
 
-本目录覆盖 V3D 到最终 SWC 的完整流程。后半段固定为
-v0.83-ring-guard-20261016，不引入后续实验算法。
+本目录覆盖 V3D 到最终 SWC 的完整流程。后半段以
+v0.83-ring-guard-20261016 为基础；2026-10-23 移植当前 v0.82 的 G-Cut
+短末梢处理。当前算法修订为 ring-guard-20261016-short-leaves-20261023。
 前处理采用 /data/disk/Neuron_trace 当前的线性重采样、
 Dataset206 胞体分割、Dataset169 neurite 分割和二值并集流程。
 /home/pzy/Neuron_Trace/Neuron_Trace_pipeline 是流程命名的参考。
+
+2026-10-23 更新
+-----------------
+G-Cut 胞体收缩后、分离和 1 µm SWC 重采样之前，调用原有
+prune_short_leaves(min_leaf_branch_length=2, stable_nodes=soma_ids)。
+按节点数迭代删除不足 2 个节点的末梢分支（不计起始分叉点），保护已知胞体。
+该门槛不是 2 µm；删除顺序沿用原 G-Cut 实现，每次删除后更新子节点数，
+剩余兄弟分支可能与原分叉点组成两节点路径而保留。
+日志记录处理前后的节点数。mask 修复、EDT 胞体候选、最终剪枝及历史回归
+保护保持现有逻辑；历史回归保护仍可能恢复旧分支或选择旧基线。
+算法变更后请使用新的 output_root。2026-10-20 的一致性结论仅对应原基线。
+本次验证范围见 docs/SHORT_LEAVES_VALIDATION.txt。
 
 文件按执行顺序命名
 ------------------

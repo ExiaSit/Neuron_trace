@@ -27,7 +27,7 @@
   ],
   "app2_temp_dir": "/tmp/neuron-app2-v083",
   "baseline_root": null,
-  "method_revision": "ring-guard-20261016",
+  "method_revision": "ring-guard-20261016-short-leaves-20261023",
   "validated_baseline_registry": "./tests/baselines/validated-registry.json",
   "input_mode": "v3d",
   "neuron_ids": [],

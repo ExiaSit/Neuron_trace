@@ -76,14 +76,15 @@ class SparseGcutTests(unittest.TestCase):
         labels,count=ndi.label(values>.91,np.ones((3,3,3)))
         expected=[ndi.maximum_position(values,labels=labels,index=i) for i in range(1,count+1)]
         self.assertEqual(component_maxima(values,labels,count),expected)
-    def test_long_single_edge_not_deleted_by_node_count(self):
+    def test_long_single_edge_deleted_by_v082_node_count_rule(self):
         sys.path.insert(0,str(_bootstrap.ROOT/'vendor/gcut'))
         from algorithms.tracing.gcut_adapter import make_segmentor
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);(root/'input.swc').write_text('1 1 5 10 10 3 -1\n2 3 35 10 10 1 1\n')
             (root/'soma.txt').write_text('1\n')
             segmentor=make_segmentor(str(root/'input.swc'),str(root/'soma.txt'))
-            self.assertEqual(set(segmentor.tree_nodes.tree),{1,2})
+            # The v0.82 port counts nodes, even for physically long edges.
+            self.assertEqual(set(segmentor.tree_nodes.tree),{1})
 
     def test_distant_soma_child_not_collapsed_into_root(self):
         sys.path.insert(0,str(_bootstrap.ROOT/'vendor/gcut'))
@@ -93,7 +94,8 @@ class SparseGcutTests(unittest.TestCase):
             (root/'soma.txt').write_text('1\n2\n')
             segmentor=make_segmentor(str(root/'input.swc'),str(root/'soma.txt'))
             self.assertEqual(segmentor.soma_ids,{1,2})
-            self.assertEqual(set(segmentor.tree_nodes.tree),{1,2,3})
+            # Both soma nodes survive; the non-soma one-node tip is removed.
+            self.assertEqual(set(segmentor.tree_nodes.tree),{1,2})
 
 class CrossingTests(unittest.TestCase):
     def test_true_bend_without_opposite_shaft_survives(self):
