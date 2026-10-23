@@ -5,9 +5,11 @@ stay on CPU: tie-breaking of equidistant owners affects reconstruction.
 """
 import atexit
 from contextlib import contextmanager
+import fcntl
 import json
 import os
 from pathlib import Path
+import tempfile
 import time
 
 import numpy as np
@@ -18,6 +20,7 @@ class MaskNdimage:
     def __init__(self):
         self.cp = None
         self.gpu = None
+        self.gpu_disabled = False
         self.stats = dict(backend=os.environ.get("RECONNECT_COMPUTE_BACKEND", "cpu"),
                           gpu_calls={}, gpu_seconds_including_transfers={},
                           cpu_calls={}, minimum_gpu_voxels=int(os.environ.get(
@@ -41,23 +44,63 @@ class MaskNdimage:
     def __getattr__(self, name):
         return getattr(cpu, name)
 
+    @contextmanager
+    def gpu_slot(self):
+        """Serialize CUDA calls across workers, leaving their CPU work parallel."""
+        path = Path(os.environ.get("RECONNECT_GPU_LOCK_PATH", str(
+            Path(tempfile.gettempdir()) / f"neuron-tracing-cuda-{os.getuid()}.lock")))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        started = time.perf_counter()
+        with path.open("a+") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            waited = time.perf_counter()-started
+            stats = self.stats.setdefault("gpu_serialization", dict(
+                lock_path=str(path), acquisitions=0, wait_seconds=0., max_concurrent=1))
+            stats["acquisitions"] += 1
+            stats["wait_seconds"] += waited
+            lock.seek(0); lock.truncate()
+            json.dump(dict(pid=os.getpid(), acquired_at=time.time()), lock)
+            lock.flush()
+            try:
+                yield
+            finally:
+                # Arrays have already been transferred back to NumPy. Release
+                # cached blocks before another process takes the CUDA slot.
+                try:
+                    if self.cp is not None:
+                        self.cp.get_default_memory_pool().free_all_blocks()
+                finally:
+                    lock.seek(0); lock.truncate()
+                    json.dump(dict(pid=None, released_at=time.time()), lock)
+                    lock.flush()
+                    fcntl.flock(lock, fcntl.LOCK_UN)
+
     def call(self, name, array, args, kwargs, eligible=True):
         backend = os.environ.get("RECONNECT_COMPUTE_BACKEND", "cpu")
         if backend not in ("cpu", "cuda"):
             raise ValueError(f"Unknown compute backend: {backend}")
-        use_gpu = (backend == "cuda" and eligible and isinstance(array, np.ndarray)
+        use_gpu = (backend == "cuda" and not self.gpu_disabled and eligible and isinstance(array, np.ndarray)
                    and array.size >= self.stats["minimum_gpu_voxels"])
         if not use_gpu:
             self.stats["cpu_calls"][name] = self.stats["cpu_calls"].get(name, 0)+1
             return getattr(cpu, name)(array, *args, **kwargs)
-        self.initialize()
-        started = time.perf_counter()
         try:
-            result = getattr(self.gpu, name)(self.cp.asarray(array), *args, **kwargs)
-            result = self.cp.asnumpy(result)  # Synchronizes, includes transfer time.
-        except self.cp.cuda.memory.OutOfMemoryError as exc:
-            raise RuntimeError("GPU 显存不足；请将当前阶段对应的计算后端改为 cpu，"
-                               "或减少并行样本数后重跑。") from exc
+            with self.gpu_slot():
+                self.initialize()
+                started = time.perf_counter()
+                result = getattr(self.gpu, name)(self.cp.asarray(array), *args, **kwargs)
+                result = self.cp.asnumpy(result)  # Synchronizes, includes transfer time.
+        except Exception as exc:
+            if self.cp is None or not isinstance(exc, self.cp.cuda.memory.OutOfMemoryError):
+                raise
+            # Keep this isolated worker on CPU after its first allocation
+            # failure. A later candidate scope must not retry the same GPU.
+            self.gpu_disabled = True
+            self.stats.setdefault("cpu_fallbacks", []).append(dict(
+                operation=name, reason="cuda_out_of_memory", error=str(exc)))
+            print(f"[GPU] {name} 显存不足；本样本后续滤波/EDT 自动改用 CPU，继续处理。", flush=True)
+            self.stats["cpu_calls"][name] = self.stats["cpu_calls"].get(name, 0)+1
+            return getattr(cpu, name)(array, *args, **kwargs)
         self.stats["gpu_calls"][name] = self.stats["gpu_calls"].get(name, 0)+1
         times = self.stats["gpu_seconds_including_transfers"]
         times[name] = times.get(name, 0.)+time.perf_counter()-started

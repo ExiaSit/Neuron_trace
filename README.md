@@ -10,7 +10,10 @@
 
 G-Cut 默认使用 APP2 原生三维 GSDT 选择厚核心内的候选峰值，保留 EDT 的 5 µm
 厚度门槛与半径评分，并包含胞体证据过滤、6 µm 距离 NMS、三维信号合并、
-目标胞体区域归属和保留稀疏 APP2 末梢的预处理修改。
+目标胞体区域归属，以及带距离约束的胞体收缩。
+胞体收缩后恢复旧 G-Cut 的 `prune_short_leaves(min_leaf_branch_length=2)`：
+反复删除节点数严格小于 2 的末梢分支（不包含起始分叉点），保护已知胞体节点。
+这是按节点数删除，不是 2 µm 长度阈值；之后仍执行 1 µm 重采样和图像信号剪枝。
 G-Cut 需要的胞体几何测量单独放在 `algorithms/tracing/soma_geometry.py`，只用于分析候选，
 不修改或保存输入 mask。其函数从当前版本原样提取。
 
@@ -197,6 +200,49 @@ G-Cut 分离过程总图和候选审计保存在 `gcut_output/<id>/`：
 
 再次使用同一配置运行时，流程按阶段检查已有产物并跳过已完成部分。输入、模型或处理参数发生变化时，使用新的 `output_root` 生成对应结果。
 
+完整最终 SWC 会整例跳过；没有最终结果时，继续使用已有 G-Cut 和重采样结果，
+失败或中断的阶段重新执行。检查会拒绝残缺行、缺失父节点和环结构。
+G-Cut、目标选择和最终剪枝的 SWC 先写临时文件，完成后原子替换；重采样也使用原子替换。
+
+### GPU 串行与 CPU 并行
+
+`gcut.candidate_backend` 为 `cuda` 时，大体积 EDT 和滤波的实际 CUDA 调用通过跨进程
+文件锁串行执行，同时最多一个样本占用该计算阶段；GSDT 原生计算、候选分析、图分离、
+可视化、重采样和剪枝等 CPU 工作仍可按 `pipeline.stage_max_tasks` 并行。
+每次 CUDA 调用结束后释放 CuPy 空闲显存池，减少多个工作进程的缓存显存累积。
+
+默认锁文件在系统临时目录中按用户共享，也可用 `gcut.gpu_lock_path` 指定绝对路径。
+同一 GPU 上需要互斥的本流程任务应使用同一锁文件；这不会调度其他软件的 GPU 任务。
+显存不足时，当前运算自动用 CPU 重算，该样本后续滤波/EDT 留在 CPU；
+其他 CUDA 错误仍报错。等待时间、GPU 调用和 CPU 回退记录见每例 `gcut-gpu.json`。
+
+## 使用现有 APP2 SWC
+
+`tools/run_existing_app2.py` 直接调用当前检出的代码，复用原图、原 mask、胞体分割及
+历史 APP2，只执行 G-Cut、1 µm SWC 重采样、排序和剪枝，不重跑 APP2、不补全 mask。
+
+```bash
+cp config.existing_app2.example.json config.existing_app2.local.json
+# 填写输入、输出、元数据和 Vaa3D 路径；neuron_ids 留空表示全部现有 APP2。
+python tools/run_existing_app2.py --config config.existing_app2.local.json --check
+python tools/run_existing_app2.py --config config.existing_app2.local.json
+# 也可以只处理指定编号：
+python tools/run_existing_app2.py --config config.existing_app2.local.json --ids 19975 19976
+```
+
+配置中的相对路径以配置文件所在目录为基准，`workers` 控制 CPU 并发数，默认 4。
+`--prepare-only` 只准备输入。历史 SWC 必须是未翻转的 APP2 原生坐标；入口只在输出副本上
+执行 `Y=H−1−Y`，不修改原 SWC，也不应用 marker 的偏移补偿。
+
+文件存在检查之外，还检查 SWC 是否含有效节点。无效 APP2、缺失输入、单例准备失败
+分别记录在 `invalid_app2.csv`、`missing_inputs.csv`、`input_preparation_failures.csv`，
+其余样本继续；`--check` 发现异常时返回非零退出码。输入来源或算法代码变化时拒绝混用
+已有结果；续跑可复用已成功准备且源文件修改/状态时间均未变化的输入。
+
+最终 SWC 在 `gcut_pruned/pruning_swcs/`，G-Cut 总览在 `gcut_output/<id>/overview.png`，
+剪枝图在 `gcut_pruned/pruning_mips/`。`run_summary.json` 保留请求数、跳过输入数、
+最终产出数及未产出编号。机器配置、输入数据、日志和诊断运行结果不纳入 Git。
+
 ## 回归检查
 
 ```bash
@@ -206,7 +252,7 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python -m unittest discover -s tests -v
 检查内容包括裁剪坐标顺序、APP2 坐标转换、剪枝函数传参、失败状态传播及与当前工作目录无关的路径解析。
 
 
-42 项相关检查已通过；15214、107046、105612、16963 的移植对照中，候选坐标/分数、
+最初移植时的 42 项相关检查已通过；15214、107046、105612、16963 的移植对照中，候选坐标/分数、
 过滤/NMS/合并审计、所有 G-Cut 分离 SWC 和胞体区域均与相同输入下的当前版本一致。
 另以 15214 的原始 mask 实跑 APP2 → G-Cut → 重采样 → 0.81 剪枝，完成全部阶段。
 详细范围见 `VALIDATION.md`。移植来源和哈希见 `PORT_PROVENANCE.json`。
@@ -230,5 +276,6 @@ G-Cut、重采样和剪枝。使用 B4.5、C6.0 和 120_130k 三个数据源，�
 python tools/compare_reconstructions.py --config comparison/original200_archived_app2.json
 ```
 
-本批 199 例成功、1 例失败，共同有效 199 例；扩展时核对并复用初批 179 例，只补跑其余 21 例。
+以下归档报告生成于恢复短末梢删除之前，不代表当前版本的末梢处理结果。
+归档批次 199 例成功、1 例失败，共同有效 199 例；扩展时核对并复用初批 179 例，只补跑其余 21 例。
 详情见 [历史 APP2 固定输入报告](comparison/reports/archived-app2-original200-20261022.md)。

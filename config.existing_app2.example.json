@@ -1,0 +1,13 @@
+{
+  "output_root": "./outputs_existing_app2",
+  "app2_dir": "/path/to/trace_app2/down_sampled_swcs_app2",
+  "raw_dir": "/path/to/1um_img/img",
+  "mask_dir": "/path/to/mask",
+  "crop_dir": "/path/to/soma_img",
+  "soma_dir": "/path/to/soma_seg",
+  "metadata_file": "/path/to/metadata.csv",
+  "vaa3d_resample": "/path/to/Vaa3D-x",
+  "candidate_backend": "cuda",
+  "workers": 4,
+  "neuron_ids": []
+}

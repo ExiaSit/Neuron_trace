@@ -2286,7 +2286,9 @@ def process_neuron_morphology(input_imgfile, swc_neu, raw_imgfile, out_swc_dir, 
         swc_name = swc_name.replace('.tif', '')
         out_swc = os.path.join(out_swc_dir, f'{swc_name}.swc')
         tree_to_save = tree_final
-        write_swc(tree_to_save, out_swc)
+        temporary_swc = out_swc + '.writing'
+        write_swc(tree_to_save, temporary_swc)
+        os.replace(temporary_swc, out_swc)
 
         # 注意：这里改成了 step09
         _visualize_step("step09_final_result", tree_data=tree_final, scale=1)

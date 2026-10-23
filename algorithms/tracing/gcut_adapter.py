@@ -1,8 +1,8 @@
-"""Preserve sparse APP2 branches through G-Cut preprocessing.
+"""Apply bounded soma contraction and the legacy G-Cut short-leaf pruning.
 
-The upstream preprocessor deletes leaf branches by node count, before the
-1-um resampling stage. Node count is not physical length in native APP2 SWCs.
-Keep soma contraction/ownership but defer leaf pruning to the signal-aware stage.
+Before 1-um resampling, recursively remove terminal branches with fewer than
+two nodes (excluding their starting branch point), protecting known somas.
+This is a node-count rule, not a physical-length threshold.
 """
 def make_segmentor(swc_path,soma_file_path):
     from neuron_segmentation import NeuronSegmentation
@@ -40,9 +40,13 @@ def make_segmentor(swc_path,soma_file_path):
     segmentor.handy_man=BoundedSomaPreprocessor(swc_path,soma_file_path,scale_z=1.0)
     segmentor.handy_man.extract_soma_ids({},size_threshold=None)
     segmentor.handy_man.soma_sinks()
+    before_pruning=len(segmentor.handy_man.tree_nodes.tree)
+    segmentor.handy_man.tree_nodes.prune_short_leaves(
+        min_leaf_branch_length=2,stable_nodes=segmentor.handy_man.soma_ids)
     segmentor.tree_nodes,segmentor.soma_ids=segmentor.handy_man.results()
     segmentor.knife=GCut()
-    print('G-Cut: preserve sparse APP2 leaves; v0.82 downstream stages follow pipeline config',flush=True)
+    print(f'G-Cut: legacy short-leaf pruning (<2 nodes, soma protected): '
+          f'{before_pruning} -> {len(segmentor.tree_nodes.tree)} nodes',flush=True)
     return segmentor
 
 

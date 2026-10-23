@@ -48,6 +48,25 @@ class RuntimeAdapters(unittest.TestCase):
         self.crop.write_text(json.dumps({'bounds_order':'XYZ','bounds_1um_zxy':[1]*6}))
         with self.assertRaises(ValueError): p.prepare_soma_reader_json(123)
 
+    def test_resume_rejects_truncated_missing_parent_and_cycle_swcs(self):
+        path=self.root/'checkpoint.swc'
+        for content in ['1 1 0 0 0 1 -1\n2 3 0',
+                        '1 1 0 0 0 1 -1\n2 3 1 1 1 1 99\n',
+                        '1 1 0 0 0 1 -1\n2 3 1 1 1 1 3\n3 3 2 2 2 1 2\n']:
+            path.write_text(content)
+            self.assertFalse(p.swc_has_nodes(path))
+        path.write_text(SWC)
+        self.assertTrue(p.swc_has_nodes(path))
+
+    def test_complete_final_swc_skips_all_upstream_stages_on_resume(self):
+        path=p.prune_output_swc_path(123);path.parent.mkdir();path.write_text(SWC)
+        calls=[]
+        stages={name:lambda cid:calls.append(cid) for name in ('gcut','gcut_resample','prune')}
+        before=path.read_bytes()
+        p.run_downstream_after_neurite(stages,123)
+        self.assertEqual(calls,[])
+        self.assertEqual(path.read_bytes(),before)
+
     def test_marker_and_native_swc_conversion(self):
         mod = p.load_stage_module('test_app2', '4_pre_trace_app2.py')
         self.assertEqual(mod.image_to_app2_marker([3, 4, 5], (10, 20, 30)), [5, 17, 7])

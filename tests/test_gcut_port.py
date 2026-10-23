@@ -20,6 +20,21 @@ def stage():
 
 
 class GCutPort(unittest.TestCase):
+    def test_interrupted_swc_write_preserves_previous_checkpoint(self):
+        spec=importlib.util.spec_from_file_location('atomic_gcut_writer',ROOT/'algorithms/tracing/gcut_stage.py')
+        engine=importlib.util.module_from_spec(spec);spec.loader.exec_module(engine)
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'target.swc';before=b'1 1 0 0 0 1 -1\n';path.write_bytes(before)
+            def interrupted():
+                yield (1,1,0,0,0,1,-1)
+                raise RuntimeError('interrupted output')
+            with self.assertRaisesRegex(RuntimeError,'interrupted output'):
+                engine.write_swc(interrupted(),path)
+            self.assertEqual(path.read_bytes(),before)
+            engine.write_swc([(1,1,0,0,0,1,-1),(2,3,1,0,0,1,1)],path)
+            self.assertFalse(path.with_name(path.name+'.writing').exists())
+            self.assertEqual(len([line for line in path.read_text().splitlines() if not line.startswith('#')]),2)
+
     def test_metadata_and_original_mask_are_sent_to_isolated_worker(self):
         import pipeline_config as cfg
         with tempfile.TemporaryDirectory() as tmp:

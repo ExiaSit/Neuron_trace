@@ -40,6 +40,8 @@ def worker_task(args):
                RECONNECT_GPU_STATS=str(folder/'gcut-gpu.json'),
                OPENBLAS_NUM_THREADS='1', OMP_NUM_THREADS='1', MKL_NUM_THREADS='1',
                PYTHONUNBUFFERED='1', MPLBACKEND='Agg')
+    if GCUT.get('gpu_lock_path'):
+        env['RECONNECT_GPU_LOCK_PATH'] = str(GCUT['gpu_lock_path'])
     started = time.monotonic()
     print(f'[gcut] {cid}: APP2 GSDT / 原始合并mask，开始', flush=True)
     with (folder/'worker.log').open('w') as stream:

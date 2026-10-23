@@ -1,11 +1,58 @@
 import os
+import multiprocessing
+from pathlib import Path
+import tempfile
+import time
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import numpy as np
 from scipy import ndimage as cpu
 
 from utils.gpu_ndimage import MaskNdimage, candidate_backend
+
+
+def probe_gpu_slot(path, barrier, events):
+    os.environ['RECONNECT_GPU_LOCK_PATH'] = path
+    backend = MaskNdimage()
+    events.put(('cpu', os.getpid(), time.monotonic()))
+    barrier.wait(timeout=5)
+    with backend.gpu_slot():
+        events.put(('start', os.getpid(), time.monotonic()))
+        time.sleep(.05)
+        events.put(('end', os.getpid(), time.monotonic()))
+
+
+class GpuSerializationTests(unittest.TestCase):
+    def test_processes_share_one_gpu_slot_and_cpu_work_remains_parallel(self):
+        context = multiprocessing.get_context('fork')
+        barrier = context.Barrier(3); events = context.Queue()
+        with tempfile.TemporaryDirectory() as directory:
+            processes = [context.Process(target=probe_gpu_slot, args=(
+                str(Path(directory)/'gpu.lock'), barrier, events)) for _ in range(3)]
+            for process in processes:process.start()
+            recorded = [events.get(timeout=8) for _ in range(9)]
+            for process in processes:
+                process.join(timeout=5)
+                self.assertEqual(process.exitcode, 0)
+            active = maximum = 0
+            for kind, _, _ in sorted(recorded, key=lambda event:event[2]):
+                if kind == 'start':active += 1; maximum = max(maximum, active)
+                elif kind == 'end':active -= 1
+            self.assertEqual(maximum, 1)
+            self.assertEqual(active, 0)
+            self.assertLess(max(t for kind,_,t in recorded if kind=='cpu'),
+                            min(t for kind,_,t in recorded if kind=='start'))
+
+    def test_exception_releases_slot(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+                os.environ, RECONNECT_GPU_LOCK_PATH=str(Path(directory)/'gpu.lock')):
+            backend = MaskNdimage()
+            with self.assertRaisesRegex(RuntimeError, 'injected'):
+                with backend.gpu_slot():raise RuntimeError('injected')
+            with backend.gpu_slot():pass
+            self.assertEqual(backend.stats['gpu_serialization']['acquisitions'], 2)
 
 
 class CandidateScopeTests(unittest.TestCase):
@@ -22,6 +69,54 @@ class CandidateScopeTests(unittest.TestCase):
                 with candidate_backend("cuda", "test_failure"):
                     raise RuntimeError("test")
             self.assertNotIn("RECONNECT_COMPUTE_BACKEND", os.environ)
+
+
+class CpuFallbackTests(unittest.TestCase):
+    def test_oom_returns_cpu_result_and_later_scopes_do_not_retry_gpu(self):
+        class AllocationFailed(MemoryError):
+            pass
+        for operation in ("gaussian_filter", "distance_transform_edt"):
+            with self.subTest(operation=operation), patch.dict(
+                    os.environ, RECONNECT_COMPUTE_BACKEND="cuda",
+                    RECONNECT_GPU_MIN_VOXELS="0"):
+                backend = MaskNdimage()
+                pool = SimpleNamespace(free_all_blocks=Mock())
+                upload = Mock(side_effect=AllocationFailed("injected allocation failure"))
+                backend.cp = SimpleNamespace(
+                    asarray=upload,
+                    cuda=SimpleNamespace(memory=SimpleNamespace(OutOfMemoryError=AllocationFailed)),
+                    get_default_memory_pool=lambda: pool)
+                backend.gpu = SimpleNamespace(**{operation: Mock()})
+                raw = np.arange(125, dtype=np.float32).reshape(5, 5, 5)
+                array = raw if operation == "gaussian_filter" else raw > 10
+                args = (1.,) if operation == "gaussian_filter" else ()
+                before = array.copy()
+                actual = getattr(backend, operation)(array, *args)
+                np.testing.assert_array_equal(actual, getattr(cpu, operation)(array, *args))
+                np.testing.assert_array_equal(array, before)
+                self.assertTrue(backend.gpu_disabled)
+                # Re-entering a CUDA scope does not retry GPU allocation.
+                with candidate_backend("cuda", "after_oom"):
+                    again = backend.gaussian_filter(raw, 1.)
+                np.testing.assert_array_equal(again, cpu.gaussian_filter(raw, 1.))
+                upload.assert_called_once()
+                pool.free_all_blocks.assert_called_once()
+                self.assertEqual(len(backend.stats["cpu_fallbacks"]), 1)
+                self.assertEqual(backend.stats["gpu_calls"], {})
+
+    def test_non_oom_errors_are_not_hidden(self):
+        class AllocationFailed(MemoryError):
+            pass
+        with patch.dict(os.environ, RECONNECT_COMPUTE_BACKEND="cuda", RECONNECT_GPU_MIN_VOXELS="0"):
+            backend = MaskNdimage()
+            backend.cp = SimpleNamespace(
+                asarray=Mock(side_effect=ValueError("invalid GPU argument")),
+                get_default_memory_pool=lambda: SimpleNamespace(free_all_blocks=lambda:None),
+                cuda=SimpleNamespace(memory=SimpleNamespace(OutOfMemoryError=AllocationFailed)))
+            backend.gpu = SimpleNamespace(gaussian_filter=Mock())
+            with self.assertRaisesRegex(ValueError, "invalid GPU argument"):
+                backend.gaussian_filter(np.zeros((3, 4, 5), np.float32), 1.)
+            self.assertFalse(backend.gpu_disabled)
 
 
 class GpuNdimageTests(unittest.TestCase):

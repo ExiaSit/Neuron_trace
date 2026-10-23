@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import concurrent.futures
 import importlib.util
 import os
@@ -110,7 +111,9 @@ def prepare_gcut_swc_for_pruning(neuron_id: int | str) -> Path:
         return compat_swc
 
     source_swc = find_gcut_target_swc(neuron_id)
-    shutil.copy2(source_swc, compat_swc)
+    temporary = compat_swc.with_name(compat_swc.name+'.writing')
+    shutil.copy2(source_swc, temporary)
+    os.replace(temporary, compat_swc)
     print(f"[gcut] selected for pruning: {source_swc} -> {compat_swc}")
     return compat_swc
 
@@ -587,6 +590,8 @@ def run_gcut(neuron_id: int | str, meta_df: pd.DataFrame) -> bool:
     if swc_has_nodes(selected_swc):
         print(f"[skip] G-Cut selected SWC exists: {selected_swc}")
         return True
+    if selected_swc.exists():
+        selected_swc.rename(selected_swc.with_name(selected_swc.name+f'.invalid.{time.time_ns()}'))
 
     mod = load_stage_module("stage_gcut", "5.gcut_pipeline.py")
     swc_path = Path(PATHS["trace_swc_dir"]) / f"{stem}.swc"
@@ -630,6 +635,8 @@ def run_prune(neuron_id: int | str, meta_df: pd.DataFrame) -> None:
     if swc_has_nodes(pruned_swc):
         print(f"[skip] pruning SWC exists: {pruned_swc}")
         return
+    if pruned_swc.exists():
+        pruned_swc.rename(pruned_swc.with_name(pruned_swc.name+f'.invalid.{time.time_ns()}'))
 
     resampled_swc = gcut_resampled_swc_path(neuron_id)
     if not swc_has_nodes(resampled_swc):
@@ -788,14 +795,37 @@ def neurite_output_ready(neuron_id: int | str) -> bool:
 def swc_has_nodes(swc_path: Path) -> bool:
     if not swc_path.exists() or swc_path.stat().st_size == 0:
         return False
-    with open(swc_path, "r", encoding="utf-8", errors="ignore") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if len(line.split()) >= 7:
-                return True
-    return False
+    parents = {}
+    try:
+        with open(swc_path, "r", encoding="utf-8", errors="strict") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                fields = line.split()
+                if len(fields) < 7:
+                    return False
+                values = list(map(float, fields[:7]))
+                if not all(math.isfinite(v) for v in values) or any(
+                        not values[i].is_integer() for i in (0, 1, 6)):
+                    return False
+                node, parent = int(values[0]), int(values[6])
+                if node in parents:
+                    return False
+                parents[node] = parent
+        if not parents or -1 not in parents.values():
+            return False
+        done = set()
+        for node in parents:
+            seen = set()
+            while node != -1 and node not in done:
+                if node not in parents or node in seen:
+                    return False
+                seen.add(node); node = parents[node]
+            done.update(seen)
+        return True
+    except (OSError, ValueError, UnicodeError):
+        return False
 
 
 def pipeline_skip_log_path() -> Path:
@@ -824,6 +854,9 @@ def log_pipeline_exception(stage_name: str, neuron_id: int | str, exc: BaseExcep
 
 
 def run_downstream_after_neurite(stage_funcs: dict[str, StageFunc], neuron_id: int | str) -> None:
+    if "prune" in stage_funcs and swc_has_nodes(prune_output_swc_path(neuron_id)):
+        print(f"[断点续跑] neuron {neuron_id}: 最终 SWC 完整，跳过已完成样本。", flush=True)
+        return
     if "merge" in stage_funcs:
         if not soma_outputs_ready(neuron_id):
             reason = f"Soma crop json or soma mask is missing for neuron {neuron_id}; merge is not safe to run."

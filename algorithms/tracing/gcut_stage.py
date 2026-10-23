@@ -47,11 +47,14 @@ def parse_swc(swc_file):
     return tree
 
 def write_swc(tree, swc_file):
-    with open(swc_file, 'w') as fp:
+    swc_file = Path(swc_file)
+    temporary = swc_file.with_name(swc_file.name+'.writing')
+    with open(temporary, 'w') as fp:
         fp.write('##n type x y z r parent\n')
         for node in tree:
             idx, type_, x, y, z, r, p = node
             fp.write(f'{int(idx)} {int(type_)} {float(x):.5f} {float(y):.5f} {float(z):.5f} {float(r):.1f} {int(p)}\n')
+    os.replace(temporary, swc_file)
 
 
 def swc_has_nodes(swc_file):
@@ -110,7 +113,9 @@ def prepare_selected_swc(result_dir, img_path, vis_dir):
     target_swc = find_gcut_target_swc(vis_dir, img_path)
     if target_swc is None:
         return None
-    shutil.copy2(target_swc, selected_path)
+    temporary = selected_path.with_name(selected_path.name+'.writing')
+    shutil.copy2(target_swc, temporary)
+    os.replace(temporary, selected_path)
     return selected_path
 
 
