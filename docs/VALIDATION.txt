@@ -1,0 +1,45 @@
+v0.83 完整流程整理版验证记录
+日期：2026-10-20，Asia/Shanghai
+
+实际执行：
+1. Python 编译检查通过；run.sh 的 bash -n 检查通过。
+2. 86 项 unittest 通过：保留原有 77 项，新增 9 项前处理、V3D 解码、
+   裁剪/恢复、模型失败不发布结果、配置路径及断点检查。
+3. 真实样本 17254 从原 V3D 读取，完成 TIFF 转换、1 µm 重采样、胞体
+   裁剪、Dataset206/Dataset169 GPU 分割、合并 mask、v0.83 重连、APP2、
+   G-Cut、SWC 重采样、剪枝、回归判断和最终比较图。
+4. 17254 使用旧输入 mask 的完整新入口检查通过。整理后 mask 与部署版
+   逐体素相同；APP2、G-Cut、重采样及最终 SWC 的节点表一致（1e-6 绝对容差）。
+   APP2 1050 节点、G-Cut 192 节点、重采样 1114 节点、最终 SWC 1061 节点。
+5. 最终交付代码两种入口的断点续跑都跳过已完成重建。包括前处理产物在内，
+   24 个主要 TIFF/SWC/PNG 文件的大小和修改时间均未改变。
+6. 14 个 mask/片段模块除导入和包路径外 AST 一致；120 个重建函数/类除
+   导入和被抽出的绘图函数外 AST 一致。不是只比较文件名。
+7. 检查最终比较图、G-Cut 总图和剪枝总图；独立 SWC 方向绘图函数运行通过。
+8. 包内没有指向原方法目录的软链接；所需 G-Cut/pylib 源码已复制。
+
+最终交付代码的运行哈希见 existing-mask-parity.json。
+实际测试目录：
+/data/disk/Neuron_tracing_method/validation/v0.83-20261020
+  from-v3d.json / existing-mask.json      测试配置
+  final-prepared/                       真实 V3D 前处理结果
+  accepted-from-v3d/                    完整流程结果
+  accepted-existing-mask/               旧 mask 入口结果
+  accepted-from-v3d.log / accepted-existing-mask.log
+  resume.log / existing-mask-resume.log
+  existing-mask-parity.json / resume-validation.json
+
+范围说明：
+本次是结构整理和完整入口衔接，不是算法质量修订。
+没有重新运行全部 52 个历史完整病例；其原验证报告单独保留于
+/tests/baselines/original-validation.json（相对于本包）。
+原算法当时的 49 个历史病例并非全部由新候选独立通过：18 个直接候选、
+15 个恢复受信号支持的旧分支、16 个保留已验证基线。
+
+已知外部依赖：
+模型权重、metadata、Vaa3D 和 hb_seg/v3dpy 按配置引用，不在源码包内。
+原历史基线 selected 目录在整理时已经缺失。没有自动替换或关闭保护；
+具体配置方式见 README.txt。17254 一致性测试显式将基线目录映射为
+已部署 ring-guard 对应输出，并验证以上五项最终结果完全一致。
+
+所有测试数据均写入独立 validation 目录。原方法、原运行配置和原结果未改写。

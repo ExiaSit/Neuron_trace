@@ -1,0 +1,56 @@
+{
+  "/data/disk/Neuron_trace/1_rescale_cpu.py": [
+    "02_resample_1um.py",
+    "algorithms/preprocessing.py"
+  ],
+  "/data/disk/Neuron_trace/neuroutils/image/io.py": [
+    "01_v3d_to_tif.py",
+    "utils/v3d_io.py"
+  ],
+  "/data/disk/Neuron_trace/neuroutils/image/preprocessor.py": [
+    "algorithms/preprocessing.py"
+  ],
+  "/data/disk/Neuron_trace/2_soma_crop_seg.py": [
+    "03_crop_soma.py",
+    "04_segment_soma.py",
+    "utils/preparation.py"
+  ],
+  "/data/disk/Neuron_trace/run_pipeline.py": [
+    "05_segment_neurite.py",
+    "utils/preparation.py"
+  ],
+  "/data/disk/Neuron_trace/3.concat_neurite_soma.py": [
+    "06_merge_masks.py"
+  ],
+  "/data/disk/Neuron_trace/pipeline_config.py": [
+    "config.json",
+    "utils/configuration.py"
+  ],
+  "/data/disk/Neuron_trace/method/versions/v0.83-ring-guard-20261016/incremental_worker.py": [
+    "07_reconnect_mask.py",
+    "08_trace_app2.py",
+    "09_separate_gcut.py",
+    "10_resample_swc.py",
+    "11_prune_swc.py",
+    "12_guard_regression.py",
+    "13_compare_results.py",
+    "utils/case_worker.py",
+    "visualization/comparison.py"
+  ],
+  "/data/disk/Neuron_trace/method/versions/v0.83-ring-guard-20261016/trace_algorithm/prune.py": [
+    "algorithms/tracing/prune.py",
+    "visualization/pruning_summary.py"
+  ],
+  "/data/disk/Neuron_trace/method/versions/v0.83-ring-guard-20261016/trace_algorithm/gcut_stage.py": [
+    "algorithms/tracing/gcut_stage.py",
+    "visualization/gcut_summary.py"
+  ],
+  "/data/disk/Neuron_trace/method/versions/v0.83-ring-guard-20261016/trace_algorithm/one_sided.py": [
+    "algorithms/tracing/one_sided.py",
+    "visualization/swc_direction.py"
+  ],
+  "/data/disk/Neuron_trace/method/versions/v0.83-ring-guard-20261016/trace_algorithm/app2.py": [
+    "algorithms/tracing/app2.py",
+    "visualization/app2_mip.py"
+  ]
+}

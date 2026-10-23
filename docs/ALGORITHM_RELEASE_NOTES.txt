@@ -1,0 +1,45 @@
+ring-guard-20261016
+Work started 2026-10-16; validation completed 2026-10-17 (Asia/Shanghai).
+
+Problem: new free-growing neurites followed axially thin fluorescent sheets and
+formed long arcs in 17254, 16047, 15917. The previous median-of-eight transverse
+profile could accept six off-plane dark samples without a lateral ridge.
+Centerline-only collision checks did not account for the widened voxel tube.
+
+Changes:
+- New continuation-only evidence requires opposing-diameter contrast in 16
+  angular samples at radii 2 and 4 voxels, in addition to the existing profile.
+- Test full tube clearance and clip/reachability-check widened additions;
+  contacts to old branches outside the launch region are not free-growth joins.
+- Invoke the already validated curved soma-root supplement in fresh full runs.
+  It was previously confined to the review workflow.
+- Original mask foreground is never removed. Upstream stages a-f, pruning and
+  G-Cut signal rules are unchanged. MIP appearance alone is not used to delete
+  3-D branches. Projection crossings do not necessarily represent 3-D cycles.
+- Full entry generates fresh masks/APP2; it does not migrate the old affected
+  continuity masks. Prior validated baselines require exact input SHA-256 and
+  metadata matches before the existing conservative publication guard applies.
+
+Validation:
+77 unit tests passed, including sheets, true curved tubes, tubes on sheets,
+widened collisions, soma-root and prior pruning/APP2 checks.
+All 52 full candidate pipelines completed: 3 ring cases and 49 prior cases.
+23 previous false soma merges remain rejected.
+Three ring cases use new candidates and have no new foreign soma-core contacts.
+Among 49 prior cases: 18 direct candidates, 15 candidates with supported old
+branches restored, 16 retain baseline. All SELECTED prior results retain >=98%
+of prior supported branch samples and introduce no foreign soma-core contact.
+This is not a claim that all 49 fresh candidates pass: all candidates and
+selection decisions are retained separately for inspection.
+For 15480/15262/15457, all APP2 outer tips remain in their selected G-Cut result.
+Full-entry checks: 17254 and 60485 match selected masks and final SWCs exactly
+(with 1e-6 SWC numeric tolerance), including the baseline fallback route.
+
+Scope/limits:
+No biological ownership ground truth is available. Subvoxel mask tunnels and
+existing loops are not globally deleted. Some real blurred branches may be
+withheld; previous validated outputs are retained when regression guard fails.
+Do not overwrite prior output folders or reuse their masks as fixed results.
+Detailed diagnostics and selection records:
+/home/pzy/ring-review-20261016
+/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2

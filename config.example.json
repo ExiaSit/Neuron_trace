@@ -1,20 +1,65 @@
 {
-  "neuron_ids": [],
-  "output_root": "./outputs",
-  "v3d_root": "/path/to/Cell_Image",
-  "metadata_file": "/path/to/metadata.csv",
-  "vaa3d_app2": "/path/to/vaa3d-3.601/bin/vaa3d",
-  "vaa3d_resample": "/path/to/Vaa3D-x",
-  "pipeline": {
-    "mode": "neuron",
-    "stage_max_tasks": 1,
-    "gpu_max_tasks": 1,
-    "infer_batch_size": 1
+  "method_version": "v0.83",
+  "direct_inputs": true,
+  "metadata_file": "/data/disk/Neuron_trace/metadata/meta_260804.csv",
+  "output_root": "./outputs/reconstruction",
+  "workers": 4,
+  "memory_budget_gb": 96,
+  "memory_reserve_gb": 32,
+  "minimum_stable_seconds": 120,
+  "skip_existing": true,
+  "python_executable": "/home/pzy/anaconda3/envs/hb_seg/bin/python",
+  "vaa3d_app2": "/home/pzy/Vaa3D_CentOS_64bit_v3.601/bin/vaa3d",
+  "vaa3d_resample": "/home/pzy/pzy/Vaa3D-x.1.1.4_Ubuntu/Vaa3D-x",
+  "soma_overrides_image_xyz": {
+    "132987": [
+      196,
+      196,
+      18
+    ]
   },
-  "nnunet": {
-    "soma_results": "/path/to/nnUNet_results",
-    "neurite_results": "/path/to/nnUNet_results",
-    "gpu_id": 0,
-    "device": "cuda"
+  "previous_swc_dirs": [
+    "/data/disk/v0.81/swc",
+    "/data/disk/C6.0/v0.81/pruning_swcs",
+    "/data/disk2/B4.5/v0.81/pruning_swcs",
+    "/data/disk3/120_130k/v0.81/pruning_swcs",
+    "/data/disk3/recovered_potential_neurons/reconstruction/v0.81/pruning_swcs"
+  ],
+  "app2_temp_dir": "/tmp/neuron-app2-v083",
+  "baseline_root": null,
+  "method_revision": "ring-guard-20261016",
+  "validated_baseline_registry": "./tests/baselines/validated-registry.json",
+  "input_mode": "v3d",
+  "neuron_ids": [],
+  "v3d_root": "/mnt/hndb/Cell_Image",
+  "v3d_dir": null,
+  "prepared_root": "./outputs/prepared",
+  "preprocess_workers": 1,
+  "inference_batch_size": 4,
+  "inference_device": "cuda",
+  "gpu_id": 0,
+  "soma_crop_shape": [
+    128,
+    128,
+    128
+  ],
+  "nnunet_executable": "/home/pzy/anaconda3/envs/hb_seg/bin/nnUNetv2_predict",
+  "models": {
+    "soma": {
+      "dataset_id": 206,
+      "dataset_name": "Dataset206_SomaSeg_rotate_labeled_no_bkg",
+      "results": "/data/disk/nnUNet_local/nnUNet_results",
+      "trainer": "nnUNetTrainer",
+      "fold": 0,
+      "checkpoint": "checkpoint_final.pth"
+    },
+    "neurite": {
+      "dataset_id": 169,
+      "dataset_name": "Dataset169_hb_10k",
+      "results": "/data/disk/nnUNet_local/nnUNet_results",
+      "trainer": "nnUNetTrainer",
+      "fold": 0,
+      "checkpoint": "checkpoint_final.pth"
+    }
   }
 }

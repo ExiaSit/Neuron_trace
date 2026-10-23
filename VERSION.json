@@ -1,0 +1,9 @@
+{
+  "version": "v0.83",
+  "algorithm_revision": "ring-guard-20261016",
+  "packaged_on": "2026-10-20",
+  "timezone": "Asia/Shanghai",
+  "entry": "run_pipeline.py",
+  "scope": "V3D to final SWC",
+  "source_tree": "/data/disk/Neuron_trace/method/versions/v0.83-ring-guard-20261016"
+}

@@ -1,0 +1,58 @@
+[
+  {
+    "file": "algorithms/mask_repair/skeleton_direction.py",
+    "non_import_ast_identical": true
+  },
+  {
+    "file": "algorithms/mask_repair/signal_reconnect.py",
+    "non_import_ast_identical": true
+  },
+  {
+    "file": "algorithms/mask_repair/soma_completion.py",
+    "non_import_ast_identical": true
+  },
+  {
+    "file": "algorithms/mask_repair/soma_neurite_reconnect.py",
+    "non_import_ast_identical": true
+  },
+  {
+    "file": "algorithms/mask_repair/connection_thickness.py",
+    "non_import_ast_identical": true
+  },
+  {
+    "file": "algorithms/mask_repair/soma_root_repair.py",
+    "non_import_ast_identical": true
+  },
+  {
+    "file": "algorithms/mask_repair/guarded_continuation.py",
+    "non_import_ast_identical": true
+  },
+  {
+    "file": "algorithms/mask_repair/continuation_evidence.py",
+    "non_import_ast_identical": true
+  },
+  {
+    "file": "algorithms/mask_repair/root_geodesic.py",
+    "non_import_ast_identical": true
+  },
+  {
+    "file": "algorithms/mask_repair/soma_bridge.py",
+    "non_import_ast_identical": true
+  },
+  {
+    "file": "algorithms/mask_repair/mip_backmap.py",
+    "non_import_ast_identical": true
+  },
+  {
+    "file": "algorithms/fragment_geometry/robust.py",
+    "non_import_ast_identical": true
+  },
+  {
+    "file": "algorithms/fragment_geometry/strict.py",
+    "non_import_ast_identical": true
+  },
+  {
+    "file": "algorithms/fragment_geometry/__init__.py",
+    "non_import_ast_identical": true
+  }
+]

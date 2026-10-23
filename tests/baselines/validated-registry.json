@@ -1,0 +1,834 @@
+{
+  "15480": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 613.0,
+      "z_resolution": "1000",
+      "soma_x": "515",
+      "soma_y": "700",
+      "soma_z": "114"
+    },
+    "input_sha256": {
+      "raw": "e894da1a77a291d5f9dcd2c9407b2cbf550e28e262faa83339b1c878210ebdef",
+      "mask": "98ff4e87744cab2cd7a048ef0cc7998d6ab428988017491fc79c88535489c39e",
+      "soma_json": "55d89daddc0f81f1b39886bc706272e7398d773d4d47f0c6da1511cb002b4814",
+      "soma_mask": "37bdac03fd9bc771de70b755d1f50fed628ab81589e44f8f7ad97a940c1a74e9"
+    }
+  },
+  "15262": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 460.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "123"
+    },
+    "input_sha256": {
+      "raw": "c891f5da970c4086513874f56e3eb355e15f87520383d01035f3ae59f47991b9",
+      "mask": "3976a99c895309df08fac9df33510c78982d3a40c784d0b5035e9b898d81791f",
+      "soma_json": "20d14f906576289c529315d5be708860c2616a689ea3a0fa0543edca86daeaee",
+      "soma_mask": "85df088d76578fe10d9c5da2a0d3388d8206c07258e5aa1c62189f2d44a8a546"
+    }
+  },
+  "15457": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 613.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "105"
+    },
+    "input_sha256": {
+      "raw": "00cd775c0f0014a66725861073006f424a77e52959bdc40be84ca757b457328c",
+      "mask": "5efcab6cec4ba0c2473b689ba8ca46b5cea12ff6656020c2b5a432d6dc28efab",
+      "soma_json": "0c9afa8ab0d680741d28af4be36c2d5fc9e37a046a17d7a88352a016d6e47c62",
+      "soma_mask": "c59aff4772bd22f32c08ca238822d3929211fc333d96254b1968116bf1a26bb6"
+    }
+  },
+  "60484": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "64"
+    },
+    "input_sha256": {
+      "raw": "616d2b1c8d27a048dfbd7334844177dcc1e6d2f5c6e9a21df5925bcca72e48d0",
+      "mask": "941986f679201c9e6362edb73e39fa53e61dd70bdf848285997f3dadb3238600",
+      "soma_json": "ae2603749ae23e6ca5d24cf7d8792cb85ecca994799956e6877bb29b82ddd209",
+      "soma_mask": "bbe103ba735ae7dc5efaa662069e7c4b85bd3680859119ba5e230c05414fc52f"
+    }
+  },
+  "60486": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "42"
+    },
+    "input_sha256": {
+      "raw": "e727c80ef86b158b878fd469be631170669df6e7190042da85490ac815dc8be7",
+      "mask": "3977a4049974eb0e1b8f4158dba701261e72c23379cd6fdf9c1675472c40664b",
+      "soma_json": "e082d59dfdaa0455e8d1cef68f262c8e6e0a607d296f5a0dadf4092cffd99cc7",
+      "soma_mask": "d61197d631c00a61579991668bc66940952c8f5fccc15dbc537f484e6037c103"
+    }
+  },
+  "60485": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "75"
+    },
+    "input_sha256": {
+      "raw": "5138e1900f1d212ff0cd98729b825b0d34caf7a895a23aae36ccf6739cb7b5e8",
+      "mask": "cd49c25c7b033f475e141c4a493c15c2f7cfeab686f77cbf8671b1369258fb62",
+      "soma_json": "23a52affe219a3e0b37ba2980d21513d2e0561f3ec215366c58b4d4f4cdff117",
+      "soma_mask": "4b0baac3bae7deb83a4704aa768ae3d8fea687118f53462bf3bfed6c8ca04ece"
+    }
+  },
+  "60570": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 350.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "49"
+    },
+    "input_sha256": {
+      "raw": "b837252c63f2b9d3d4bd42f15b09c61eee73259b145e5ab2e47ab253847bf838",
+      "mask": "489301723c086ef1af9ac29d0466f01df8b98edd0f7577e54da08c20f459d13f",
+      "soma_json": "2435829d3a794226b050823fdee3d2ad8222a0158323a4af54293a369e952059",
+      "soma_mask": "812744158471156d58c3b70f5ed86dd7dbeb3d59890c5e65ee9a16160ff6da81"
+    }
+  },
+  "60572": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 350.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "36"
+    },
+    "input_sha256": {
+      "raw": "c9e864092e3051e5e8e88e00b64608d71f34e36d3f97b430ae2d5e1772d4821d",
+      "mask": "bbbb3f476dd2d64345b0f6bfc3a9891bf4bff96c34f0d078d5880576927b6d7f",
+      "soma_json": "fa334ab44bb43b07d33537f475543f665ccbaef42563d4a152cdc397b1efb8cd",
+      "soma_mask": "39c35ac8cdddb7ee468100972eddd707d73e6103f693b817a3dacb845bd8e04d"
+    }
+  },
+  "60576": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 350.0,
+      "z_resolution": "996",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "41"
+    },
+    "input_sha256": {
+      "raw": "df942af9a53e8004ce67f55322f95bfc98a607b9744004724fb19e279bfb7111",
+      "mask": "8ed11c85be470f68c16e7606ade038940faab20e4531bd2c6b7fcca17d759454",
+      "soma_json": "c0fa9d7e0557b81b64eb7d510111eacafe2b1a694a70935ec60225941fb058ea",
+      "soma_mask": "995631a80b5cf93948f592b10eedc986183648c50bb6783c83dcc43b53a236d0"
+    }
+  },
+  "60573": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 350.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "37"
+    },
+    "input_sha256": {
+      "raw": "a3e93bc6b0b82b3d2607a948e26b6b709ba68a403d3f7e393ade315bb7e79ee2",
+      "mask": "c439e9be5eb324bc6bd30b93b9ae6ebd144e36b9e294a9f195777937a8093f0f",
+      "soma_json": "d2e4ce9a873edf916dd813372bf254bd9cd0a21ec6c2014a4b5cabd084677b26",
+      "soma_mask": "e16853c1b03c5a673949ffadb8127d0b331f6b5d2710f9d1b7db04cfc2964a21"
+    }
+  },
+  "60608": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 350.0,
+      "z_resolution": "996",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "49"
+    },
+    "input_sha256": {
+      "raw": "3ada31e6c0319b22e366f0ab8d4a3835581a76fde6dda15831aeae7e6cb07693",
+      "mask": "fdd743efc07802047a7e50037217e3010261a8522bbc88171fad8cfe5848431b",
+      "soma_json": "1aa6693e7cece14eac026cbf6a8c7268dc4556efd0bcbd888a0856da4764e829",
+      "soma_mask": "655e65fdf0d2cf7c8ded9d1aaf30731d5d1dceef4b2c544b551c4c169b958283"
+    }
+  },
+  "84957": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "50.695"
+    },
+    "input_sha256": {
+      "raw": "7347fbd0ba1ccdf56f73d307e10a2317ced43e2198ace8492eacf7c7c38f6d64",
+      "mask": "2246c4ddd4ac381b768fceb19e3c002c5937389ff277fdbeac8afa3dd3e6a71a",
+      "soma_json": "935c05b0f941e2c93c6cba68144de89b368d43f6cb8382eec26054a49f07da38",
+      "soma_mask": "68ab605db48aeb4044a928a91e04d7d2616454241b51b05b9030a81f2bcc2271"
+    }
+  },
+  "99839": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "996",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "58.62"
+    },
+    "input_sha256": {
+      "raw": "d26d1f893bc87089fcdeae470975a9016d474b61394dcf0ee1140984ef9ed252",
+      "mask": "5f8ad41765644a1f4460487b3b506029b151136f99bdb827ac7c71f1776dffad",
+      "soma_json": "5a459f38197ba37dadb89fc38217bb43608e88927c8b3480bd551e773158ef38",
+      "soma_mask": "621901975782521f99dd3df1908bc25deaef83198d87c7d298052a9cd9fb211e"
+    }
+  },
+  "60619": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 350.0,
+      "z_resolution": "996",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "40"
+    },
+    "input_sha256": {
+      "raw": "36d41ac13839dbf75cb267141bcf250eb070562d2e1c84e80462cf9d553f6e95",
+      "mask": "81c44af904e308f6451ad89f17a6696a619e1dbb6b95c239d8dd02688ea5bd37",
+      "soma_json": "0733ef97086a8196cdc26abf918f3fd8203a70fc9d2e6de9c099b3ddfd9bca68",
+      "soma_mask": "e3580370f0049be29bdfd7103f7af5363d7564139d914cf2cdf8862d0c8537f7"
+    }
+  },
+  "124384": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "997",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "87.939"
+    },
+    "input_sha256": {
+      "raw": "4f396b2f73cbb0e28473ca5f08d648e164315f798e19d171c94864dad0a73f29",
+      "mask": "bc0af50912ab0f042be560ec828f54821c3e4d15f005b544a8f78377dc4f196f",
+      "soma_json": "717e003859279ec9dd1405b78f5796570871813b2ca4e3e1e03a6a1bf7907841",
+      "soma_mask": "26edb2f16e4618c37210797c45bc0024ea03bfdbc198df26532a1e1aa32e2a7a"
+    }
+  },
+  "45445": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 350.0,
+      "z_resolution": "992",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "61"
+    },
+    "input_sha256": {
+      "raw": "74b7dc2b1807da708eeba20495fa8714aec79d9b75faeab6524de9e83f15ea30",
+      "mask": "32d79cda68de4a546225c46f91e7a57481a9db091e82d393c2d3b2a6ecd065e1",
+      "soma_json": "a531c601946bc09f45ec372351b318cb61387dc6d50913cff102e7f69c2981f3",
+      "soma_mask": "22d717f216d35f836cd19d629344427f38091be993f9759d307993a3a6d49e97"
+    }
+  },
+  "132987": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": 18.0
+    },
+    "input_sha256": {
+      "raw": "773b4e21eb04d307779a57592d1b2a8a949a250c7198d4be9e96a99f6081f23d",
+      "mask": "99cd98cd6a4621c41a39fc1b0cb76b3affb22c855fc0639d27d6ea8d2da97d87",
+      "soma_json": "b25d91c2d9f7363799e3fab140c328fde97d8724d6d11fcc6a54da561104a7a7",
+      "soma_mask": "482f4bf6db7b7e9991a3ffeaec88d8e027e38deafe435ae0ee408001a3664b86"
+    }
+  },
+  "132969": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "45.15"
+    },
+    "input_sha256": {
+      "raw": "bf7376944b79e3a643ef2949a23a58ffe4a7950cba9f287666cd103c2526a0c0",
+      "mask": "6a68e62c0f92fdd52eaf18c15cc50df03baa22746f86071d469283ea623a94d2",
+      "soma_json": "e7f326dc4df119b922f41efb9840e59ba3bba466aa5bc703e7d5c4a2c5f667fc",
+      "soma_mask": "d1a9fe4c08d24bcdb77614c895dee0568b3b3d6ae162254dda063b87cd4631e6"
+    }
+  },
+  "133020": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "61.444"
+    },
+    "input_sha256": {
+      "raw": "8b371d1a9f9706407ae26d4f0229fb5ec75087451e94c430bf59a4c83fbd3bd5",
+      "mask": "811e1c1520771ee0f63ec3de95a58574c5c5307a881e51369342081a0b06333a",
+      "soma_json": "31f074bf4465c0d15bbed1b9d74be1cd10fbedcb6ea82f634d50ff32fcd62899",
+      "soma_mask": "b6cb0627ea312eff27f28bf8c5c40e08785323a595d60026e447fbbb82af0d0a"
+    }
+  },
+  "133036": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "77.436"
+    },
+    "input_sha256": {
+      "raw": "69accb98ed797f8ccc237c150eac1890073f46170df97be4f21647371253f1cd",
+      "mask": "0e798f3c2d156a218f1e923998c4bf02e0188b5ff1f800d2ff2627ccab0aa5ea",
+      "soma_json": "523ffe6ae3bb13ff068a7d520a17c185b54075461f9163cd9db9c8b6728ee6c9",
+      "soma_mask": "c1db818006ed4386ce7940793a2381f365774c82487e6164cf8848af24dceaac"
+    }
+  },
+  "133046": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "52.38"
+    },
+    "input_sha256": {
+      "raw": "9ef3ae09208ed211295028cd1ec66e311f7ec8a2d51af2efa0668f3ae6adbdc7",
+      "mask": "553c51ecd6216e2a2c6c5a7c0ff10ecadbcc13cb43a1585146171cde7028930c",
+      "soma_json": "8946fcf60d561e8c64175cbe710807e30ceaf059c238775e6b0cbaea575a1b82",
+      "soma_mask": "5341ce2ccb90c98a5c532bc5f015ce4c9073ddd5d7a21d06adcea388ed18f07a"
+    }
+  },
+  "133092": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "59.212"
+    },
+    "input_sha256": {
+      "raw": "dd81ec19c7b6a49a4a69fd6082e46724ced9fdc8b2b6cdac3a32e9abc678236a",
+      "mask": "1125f11dd0aac5793946dd0d03b810ffc9e408bf1f5a851089bd030203b56f30",
+      "soma_json": "916dbb9b84f2768049e3b22afa01b0b2dff0a18cb0619710e0fdb6372c118f1b",
+      "soma_mask": "ea86d88c3775e9e7ee11353bdfd3647eca09dad53c5e6ad1fc1f8ace57fe54b4"
+    }
+  },
+  "133106": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "84.667"
+    },
+    "input_sha256": {
+      "raw": "461088deb3564d26de0d4efd2bbfa1de26d4f81943a424f19285729de51a0c78",
+      "mask": "3cb361be9352f52a4d4972ec36ac597ce09255fe6f8454ad5ed2ddaf3dae6429",
+      "soma_json": "0702abc393d475e21ef54d3b676cc13b7373c7d2e7389662ec648abf4f69ceba",
+      "soma_mask": "7dd722161462e288015a26706ffcf05ab974f96b11add08435870ff7a4c978eb"
+    }
+  },
+  "133110": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "77.708"
+    },
+    "input_sha256": {
+      "raw": "6ccadf1ce2bcaa52d7131e58a42e887fee38e11e9ccecd510b28d6738cc866c2",
+      "mask": "8ad4bfbc153b37127757dc62ea42264a22990c0ad2802d3cd546756efe6cd76e",
+      "soma_json": "ed07115d8f48a846a6d582bd13c8549bbecc051a689eeddbc5dfd5a44e4fc0f4",
+      "soma_mask": "0fcb6b4efa6ee6d9da072fcbd85f461c6d57685474c4966eff2d217587b8bae3"
+    }
+  },
+  "133154": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "99.528"
+    },
+    "input_sha256": {
+      "raw": "b72dfe9147b4ccf4f9e3d2880ddc5cce6d680ce7f95fc89441c7578cd409b32d",
+      "mask": "bb293447ce0c9fc1e0c32d58d57cbb45f579e6b52db693a758ac4fc475783805",
+      "soma_json": "0d42d90308818f7f262b9ede7328aec6f1f934ad894c79a28c4d9343744151e7",
+      "soma_mask": "c47b6a2af9b727e2d194f7739c1c2eb9cf70871dbb4fc4bee3c2c72338b05185"
+    }
+  },
+  "133159": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "92.487"
+    },
+    "input_sha256": {
+      "raw": "2b38d202e1c926d5586abadb761056f6a44f9246a08f95da9f62b7e05a21b0c8",
+      "mask": "0ba1802824e05a0e42324a8e027ed312f0b6ae00198ca1c96341378faa3658c4",
+      "soma_json": "74aa36b940b0bca719b6059f62a995fcbbda77fdbbff0e713ec7d9d8fa831e7a",
+      "soma_mask": "6e05ff0072e4c85a42e09ed7cdec6043723bb1b5a689aff9a9517dc3e259e7a6"
+    }
+  },
+  "135291": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "996",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "90.228"
+    },
+    "input_sha256": {
+      "raw": "dd3ff9c8f3adec472bbc58908804071e6117f10b7532f44d510ba573464e56c3",
+      "mask": "2ff2a270d912869a4834e7c1621b4d0d285a44c8c0505df4e3c2eea94fffad81",
+      "soma_json": "fae0efa0ea2ed25c0616117a0a70c00f8075f41c97c477ba3af4833a192449c9",
+      "soma_mask": "3a96b6c6099ef9f012c0b141a01ab7cbd9ba9f6ce65428f2d84d4860cb60ac68"
+    }
+  },
+  "135391": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "58.442"
+    },
+    "input_sha256": {
+      "raw": "3563ad704693cb422fd5f38bd3c484f7adf56f841b1b73bd1a7af152d95e2dd7",
+      "mask": "8e66a2a754a6a2f7b24ac432aefe56252be8811aa8b6aa7e6f27cbf7402179fd",
+      "soma_json": "c41e3d4bd3041ed8556ca1ac7352a69253ecdba2b98d38397f4c7a781a669042",
+      "soma_mask": "ac7244e4a6c23b09b0b73d5e0f40837f2b3aad298a9a8138539a108137b742d2"
+    }
+  },
+  "135456": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "131.645"
+    },
+    "input_sha256": {
+      "raw": "be21b1c98cea5889faaf2bc3c7508ae2373a48eed341b227f16c3b3d24f45006",
+      "mask": "ebde6b7f7adffc99ccb4aac5f918cf2d52f5fe7bd6915dc7421e3f1a97a64a0f",
+      "soma_json": "373a956c2102053c9f07a80fed229ab1d8e162ecb236668e7a36c29300cf14fe",
+      "soma_mask": "a94c9b25b41aa688ef5d9126201127097b8dac2d97b8efda7837c621bd52602a"
+    }
+  },
+  "135660": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "996",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "44.089"
+    },
+    "input_sha256": {
+      "raw": "c4fe4ba72488de424c24ad30c732434a581e8149c43c0aeef1389795bfa2acb2",
+      "mask": "76743a24404aa2e2dd57b6a39ede3976bd2f4beadd503bf2c5135b090e833590",
+      "soma_json": "e30cf0766fd0ba1635be0a1c62eb6bf381cb61169b103d428ad632706229990c",
+      "soma_mask": "60d638355838422ea1ae3f5645fcb55e6a542b5eca5e574e9cddf2ec03b1e79f"
+    }
+  },
+  "93031": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "998",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "59.728"
+    },
+    "input_sha256": {
+      "raw": "a9a8f871cb91e8983fdf5d5084110d61998fcda6d8c71d9f14d706d58ed330b6",
+      "mask": "f93e59553ffd982c444d24ea375bfe85d725a4875f7572cb7dcebc72b478bdd8",
+      "soma_json": "d4e85bdd62f71427c36552e144a681641b365168ab8e61bf46f5e40622c1d2c6",
+      "soma_mask": "410d13fd0a2f9441d1152fda26bc5518c76c365d3e187a48399176f96649bf80"
+    }
+  },
+  "121461": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "997",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "66.358"
+    },
+    "input_sha256": {
+      "raw": "d62b93e7f801b1f3cc72e55576c83f95d297b488c1beb9e74c0c3210d3942ac6",
+      "mask": "7e61a6f2618a2b65b62535c9467832886d75fdb7f4752013fc9c03650af6475b",
+      "soma_json": "429a327b06f9fb5e0b8e9462724aab1cc450ef04e055811a2179a2a49d0ba53f",
+      "soma_mask": "1f5ba07a77912d56100a36ed445fd6f1ce4f65689ce3d67806bbbc04a5c9668a"
+    }
+  },
+  "99718": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "997",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "161.169"
+    },
+    "input_sha256": {
+      "raw": "c1a3caa93d139eb43aca27610435f553cd01b01984a04d996124c2c0dfc30bc1",
+      "mask": "00aef2d2a67192bffd17659f860374f004829270acda9723cd54de8690677ac4",
+      "soma_json": "7ca27ed452d37c56290e55efc1dc42c3b173443405f7874e7d7966bbd08f413b",
+      "soma_mask": "b130ac1db7716b8ede11ce7b47ec5446bca7e1ede4814939f9295abfb43e9723"
+    }
+  },
+  "133072": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "79.99"
+    },
+    "input_sha256": {
+      "raw": "9409d4a4b831311bd4bded255c9f0104e01656835a03e25e512f5262df7f9747",
+      "mask": "6969c789fcc9ad54dbb581679002ceb5437d3689b53ecc7024e0298a7a264be9",
+      "soma_json": "5e230723b8ca18693067f80cb2542f4e9d74dc3e42e5ab740cd9d8f78fb33327",
+      "soma_mask": "60c231be8629f4055e65c56647240da54bbecfc9afef3524edbd0fe046094322"
+    }
+  },
+  "74049": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "995",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "18.154"
+    },
+    "input_sha256": {
+      "raw": "df9759beac92e402f1ef8fb4f3530d1f66ca1fb73c90566a5dd7f8a339d26605",
+      "mask": "294c033c38e2c3e09bae0d62c2acc07c9a8983833ed9bfdc564616cef0f54f64",
+      "soma_json": "fe4818823d846b561ab88a14de627df19d79e0eec4d2f5489b0696c9f9557f4a",
+      "soma_mask": "0c9fbdf24768b2c2f099ab3e40db4f7860df625d6b92cc2e42d9076d6f84c7c9"
+    }
+  },
+  "133145": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "88.002"
+    },
+    "input_sha256": {
+      "raw": "cb3fae942e29361596c8b8080356f4075f1ec1d3138dc4740b62b368304485c1",
+      "mask": "deb7658fc8c45b7154ca1cb5a3f2b24e79123f4311899ddceef1f3733eea6143",
+      "soma_json": "de9eec07d68b6a7bb42bcd6f625ac89fe0a199ac951ae14c64cd2614fd50a71b",
+      "soma_mask": "c9cd28fc1d4e10801e8216d4e2e04b715c124599177c72ec5bf4bf197622a9dc"
+    }
+  },
+  "133177": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "117.716"
+    },
+    "input_sha256": {
+      "raw": "4198a1955acf2ccecdb49e99aab20eb1fb957551606979b96bfe706b69beb3d6",
+      "mask": "a50bc4a7daaaa5ff50b6f9da2a38cd5e1b3b1dd07fdad0d1ee2049bc576f831c",
+      "soma_json": "bb34633717fbd0eff98789bd894e1100c15af5a23aff335f810a192172d1c8b8",
+      "soma_mask": "8b604da8ed9a25979041a70addd1292a8f43ee5ddb2da5868ed8e60c34539795"
+    }
+  },
+  "135258": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "996",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "109.43"
+    },
+    "input_sha256": {
+      "raw": "721c1a0f1475e08224d06622c3201ca933e916dffba6158b73228679c9cc3538",
+      "mask": "fe0d33e780480904791c6c77aff30cb8fe7b0fb7cafc95882830027df65022cd",
+      "soma_json": "60367e00b792cef2abe8b66c729c67901189fc5984d1bad45a3b02bfa641c8bd",
+      "soma_mask": "5a8ccec0e73fbf2da00c54dd1bb9cbf78f00db97b2219294bc97ea45a8470e7b"
+    }
+  },
+  "135434": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "81.89"
+    },
+    "input_sha256": {
+      "raw": "d4d593c52b410efeb5d2d6e562442ae9eb7595b452a93d4c66359a372f4d51ec",
+      "mask": "4e393ed77bcdb8edc382bd3ec1c1bbc125aa47794c5f81a6102ff16c19e3a595",
+      "soma_json": "1f2bf2653fc0c220e4ca0ddd3aa92a59799bae7a1358674e5f64f0ba9b037ede",
+      "soma_mask": "243d76fa6e183eb2720227864e895bde17386126b877d0dcd153d827b60c2948"
+    }
+  },
+  "135262": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "996",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "111.453"
+    },
+    "input_sha256": {
+      "raw": "eef7fbc785ecbcbe55813b094763e5e583e067124be4547cb299cd87d60bd518",
+      "mask": "1972d4c4bf2aa6eec2afd0c99fd78ef083933f7d85a0cf0bd4638a796c1e1b93",
+      "soma_json": "85086f4795c71d8a8d6ec06c0a3350ad306db75a79514f59d00c3d8512ef290c",
+      "soma_mask": "f6de002c8525eb3fa34ae601aa645e346f1c1a2ae14ed2c91b72bdb7dbf76356"
+    }
+  },
+  "133001": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "78.897"
+    },
+    "input_sha256": {
+      "raw": "3f651e12b22d34125a7db485db4401e1fb70eb45afad6c2bdf0efc6181eaf292",
+      "mask": "cbbb0fca2d7e8030414e38f09c229cf982127447ffcf4e83d199c833192e49da",
+      "soma_json": "011d5ad9354dfc48d91ff9e46f88dd9468cc47834b2403195adab7c94e72b16f",
+      "soma_mask": "13149d153659e6b6bc8a55bbf196e70b29e6d13d5ec9ee2998907bf8e9188865"
+    }
+  },
+  "135346": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "996",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "122.486"
+    },
+    "input_sha256": {
+      "raw": "3a4d11ff1f5004b7463abd293579e591518c5098239934cf427f426bb5f8864a",
+      "mask": "d833372ee3e0fa624f9f6d9a764a3c336358baeba24713e33b066209689a2df0",
+      "soma_json": "51f64d028e2e949d2ddad087af860a6389f03d0c5108c91172750d41f21173a0",
+      "soma_mask": "b083a16ca0c39b18eceea147cc81f6169a9c6e4678aff2dfe87c29a35ad8c26c"
+    }
+  },
+  "120001": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "995",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "59.86"
+    },
+    "input_sha256": {
+      "raw": "377a92013c21b0a05fe4c0d9f07eb4d4916e3a58b7138537613d94353ee7d612",
+      "mask": "5ae25dbbfbbdcc935b8bbd0a7fe7df39a1c21a8417578004be48a738496faa5b",
+      "soma_json": "06462fb4e4185721476c57fc18d2dd7fe271c5f2c33122e4edb9b669a904dd02",
+      "soma_mask": "26a7ada5989eae198ba38cf453107eb2fb62d06cec79b9ab63175194c113ea61"
+    }
+  },
+  "135352": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 280.0,
+      "z_resolution": "996",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "132.533"
+    },
+    "input_sha256": {
+      "raw": "53daf4d17997a1a24383ab73fbda4e51e940cc81f7bac30b5a9b4060c11d9252",
+      "mask": "646cdb8233bafedcc191d6ce2ca9806b88f5f575da38601c86438af68a6b5a92",
+      "soma_json": "75f60cedf3826cb0960330eea3bad9bb63bdc8e7698ac9ce1c9405883eeb41b1",
+      "soma_mask": "9967202092366724232b5b6d12a0101c2adfd1688ef5cede86fbd7e23f721d01"
+    }
+  },
+  "135147": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 350.0,
+      "z_resolution": "997",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "98.885"
+    },
+    "input_sha256": {
+      "raw": "bed660293655bcf8fec353e241bf04f5136671c0823141c94d4a6eecb7a39ce3",
+      "mask": "fa6b6562e3506df06416bef8de74e93869922c96c18fda921ba7e7cbf1645aaf",
+      "soma_json": "7bee9612ca744bcc9283f4edb352d9a4b62532f73dd3667b9e829eb981ffe99a",
+      "soma_mask": "17efc7cecc9842a833ba228dd84f68154ae4c7bb8d876757066d03f031cd8f45"
+    }
+  },
+  "60227": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 350.0,
+      "z_resolution": "997",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "70"
+    },
+    "input_sha256": {
+      "raw": "ec46e590cb3180d2bc8f449e3b8d7dae2cdbad18b0554fe6ffa47ff4bcd614dc",
+      "mask": "3af0067d0bb526a21d98f63f933a7c37e5f44c654f5467e3675e6c0fffc761c9",
+      "soma_json": "10e221c90a51408bede2ae0ca58b7e6ef255888597a69e14d1c7699d9e33c3ec",
+      "soma_mask": "cc28164e2701c1e9f3da5dff0b711442773b24e48037450fe3798606db76fa31"
+    }
+  },
+  "60216": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 350.0,
+      "z_resolution": "997",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "79"
+    },
+    "input_sha256": {
+      "raw": "c760142a9fd31125c98c2788e300247c7c20172b49cdc74a3806a883509caa31",
+      "mask": "b7f0b205032f8f27213728ba5d834604635d80343dc7e2d40fa3e95a95c0b8fe",
+      "soma_json": "4e100ab7317b81bbfaa6b0440c73b9b571989a933abcf95d4cc8fd285cf4aaac",
+      "soma_mask": "654959d91f38ffc2eaba80795113ecec7917317c3d480dd6c5d804ba759ea5d9"
+    }
+  },
+  "60219": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 350.0,
+      "z_resolution": "997",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "74"
+    },
+    "input_sha256": {
+      "raw": "c3716927337fe108bced94fa1043ec402faf3ba650e62d050153ff0a7f37bd55",
+      "mask": "2c603703a59d4670eede17d86f4d4a39b702b7e1c378b128976922b5d5e3b1f9",
+      "soma_json": "2aed12344bfdd2905b6ff624ce346fcae4b7344b4501f74fdbdc7a8a08a676b6",
+      "soma_mask": "5d113d87cf9bedbc57329076e2be8436890dd860094c7bbc13d1cc1dedb4a789"
+    }
+  },
+  "60221": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 350.0,
+      "z_resolution": "997",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "82"
+    },
+    "input_sha256": {
+      "raw": "04193856b0ba4259f7abd3d27a12da0c63d0a546aeb1de4e745e3031aa7f8aee",
+      "mask": "909dfc0dd31502a793430fe48f5c30637d55d59568cf3c666577e827b1fddbff",
+      "soma_json": "0364fc46a59babd1645a3f9b32ccce8ee4ac9265c47e2f9df9277daf28929276",
+      "soma_mask": "28ed7fa2225a17c4e78444e03b5d45733d35ff86aa6263a4ec57cbe6c068931a"
+    }
+  },
+  "17254": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 350.0,
+      "z_resolution": "994",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "63"
+    },
+    "input_sha256": {
+      "raw": "4632095f18f41540ca33c7317114492c3ef28b0e9de967f5ac34a423eb5fd6a8",
+      "mask": "5bde975610680427a13061020a080010b16f7f12783366e2deafb39e53f6e227",
+      "soma_json": "4702a2771e850a633eccf2e51a7a5e51a211cb40f8ba6106b2c08b2b6e5d6def",
+      "soma_mask": "d75b494a8190b9fd63144c56d39f1483677ce4943315cb8c23d3a6dc85522bb6"
+    }
+  },
+  "16047": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 613.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "129"
+    },
+    "input_sha256": {
+      "raw": "247ff43e591afe1233715d6b29ea26b523f3d7f51fa56cca7976b387e6b624c5",
+      "mask": "51e8d062737ffc7dde4c71d98281f840aa638cf38051b493747407103102d335",
+      "soma_json": "109ea2f8caa4fc118949ee4f90750c6341bae54fceb0f3ed1b5ff2d6e51d82a6",
+      "soma_mask": "d9ff8cb93980dcaa066f6163b7b506bab7982bca93c652f3b4a0ff7b0010053c"
+    }
+  },
+  "15917": {
+    "root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-review-20261016-v2/selected",
+    "metadata": {
+      "xy_resolution": 460.0,
+      "z_resolution": "1000",
+      "soma_x": "700",
+      "soma_y": "700",
+      "soma_z": "68"
+    },
+    "input_sha256": {
+      "raw": "64171dd459341c66c99f6652656e551fc83558e00a7494ea8f493ebbebf05870",
+      "mask": "ac2e029959812b3a77db2b4e491a8fbca15a8f454938aa763323936bd5863936",
+      "soma_json": "7a62d2fba2d12fca39a36269d56febe640c4bcfbf5858d02853c0dcdea0fa459",
+      "soma_mask": "1ff020364df243d4297fa2fc0fb6dcd82ff8f113236f2b76db103e396ca2a642"
+    }
+  }
+}

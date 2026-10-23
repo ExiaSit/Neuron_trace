@@ -1,0 +1,23 @@
+{
+  "runtime_sha256": "9db3d7f443535f81ccf1f7d7b83b4a65af919693ee167b8230af86eb21706f2e",
+  "mask": {
+    "equal": true,
+    "changed_voxels": 0
+  },
+  "trace_app2/down_sampled_swcs_app2": {
+    "equal": true,
+    "nodes": 1050
+  },
+  "gcut_output/selected_for_pruning": {
+    "equal": true,
+    "nodes": 192
+  },
+  "gcut_output/selected_resampled_step1": {
+    "equal": true,
+    "nodes": 1114
+  },
+  "pruning_swcs": {
+    "equal": true,
+    "nodes": 1061
+  }
+}

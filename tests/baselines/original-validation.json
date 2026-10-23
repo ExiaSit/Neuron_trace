@@ -1,0 +1,390 @@
+{
+  "records": [
+    {
+      "id": "15480",
+      "decision": "candidate_with_supported_baseline_branches",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.9958330577419141,
+      "new_foreign_soma_contacts": [],
+      "outer_tip_count": 766,
+      "outer_tip_retained": 766,
+      "maximum_tip_distance": 0.0
+    },
+    {
+      "id": "15262",
+      "decision": "candidate_with_supported_baseline_branches",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.99994745691467,
+      "new_foreign_soma_contacts": [],
+      "outer_tip_count": 949,
+      "outer_tip_retained": 949,
+      "maximum_tip_distance": 0.0
+    },
+    {
+      "id": "15457",
+      "decision": "candidate_with_supported_baseline_branches",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.9957627118644068,
+      "new_foreign_soma_contacts": [],
+      "outer_tip_count": 827,
+      "outer_tip_retained": 827,
+      "maximum_tip_distance": 0.0
+    },
+    {
+      "id": "60484",
+      "decision": "candidate",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "60486",
+      "decision": "candidate",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.9991459561021436,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "60485",
+      "decision": "baseline",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "60570",
+      "decision": "candidate",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.9961685823754789,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "60572",
+      "decision": "candidate_with_supported_baseline_branches",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.9949345715491769,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "60576",
+      "decision": "candidate_with_supported_baseline_branches",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "60573",
+      "decision": "candidate",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.9829415977602709,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "60608",
+      "decision": "candidate_with_supported_baseline_branches",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.9976344086021506,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "84957",
+      "decision": "candidate_with_supported_baseline_branches",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.9946172248803827,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "99839",
+      "decision": "candidate",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.9861523244312562,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "60619",
+      "decision": "candidate",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.9845043515177245,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "124384",
+      "decision": "candidate",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "45445",
+      "decision": "candidate_with_supported_baseline_branches",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "132987",
+      "decision": "candidate_with_supported_baseline_branches",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.9936102236421726,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "132969",
+      "decision": "baseline",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "133020",
+      "decision": "candidate",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.9846743295019157,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "133036",
+      "decision": "candidate",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "133046",
+      "decision": "candidate_with_supported_baseline_branches",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.9842578710644677,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "133092",
+      "decision": "candidate",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "133106",
+      "decision": "baseline",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "133110",
+      "decision": "candidate",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "133154",
+      "decision": "candidate_with_supported_baseline_branches",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "133159",
+      "decision": "baseline",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "135291",
+      "decision": "candidate_with_supported_baseline_branches",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.9942359060874455,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "135391",
+      "decision": "baseline",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "135456",
+      "decision": "candidate",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.9930915371329879,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "135660",
+      "decision": "baseline",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "93031",
+      "decision": "candidate_with_supported_baseline_branches",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.9919706755105603,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "121461",
+      "decision": "baseline",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "99718",
+      "decision": "baseline",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "133072",
+      "decision": "baseline",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "74049",
+      "decision": "baseline",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "133145",
+      "decision": "candidate",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.9948616600790514,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "133177",
+      "decision": "candidate",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.9977790116601888,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "135258",
+      "decision": "candidate",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "135434",
+      "decision": "candidate",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.9946666666666667,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "135262",
+      "decision": "baseline",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "133001",
+      "decision": "baseline",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "135346",
+      "decision": "candidate_with_supported_baseline_branches",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "120001",
+      "decision": "candidate",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.9901098901098901,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "135352",
+      "decision": "candidate",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.9955237242614146,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "135147",
+      "decision": "candidate_with_supported_baseline_branches",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.996776273372018,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "60227",
+      "decision": "baseline",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "60216",
+      "decision": "baseline",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "60219",
+      "decision": "baseline",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "60221",
+      "decision": "baseline",
+      "valid_swc_trees": true,
+      "selected_coverage": 1.0,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "17254",
+      "decision": "ring_fix_candidate",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.7566510172143975,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "16047",
+      "decision": "ring_fix_candidate",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.7447749809305874,
+      "new_foreign_soma_contacts": []
+    },
+    {
+      "id": "15917",
+      "decision": "ring_fix_candidate",
+      "valid_swc_trees": true,
+      "selected_coverage": 0.8338992642897567,
+      "new_foreign_soma_contacts": []
+    }
+  ],
+  "cases": 52,
+  "legacy_cases": 49,
+  "unit_tests": 77,
+  "rejected_false_soma_merges": 23,
+  "limitations": "Raw candidates are not all regression-safe. Selection decisions are explicit; baseline fallback preserves previously validated results. Ring cases intentionally discard unsupported prior branches.",
+  "full_entry_cases": [
+    "17254",
+    "60485"
+  ],
+  "full_entry_exact_mask_and_swc_match": true,
+  "resume_primary_files_unchanged": 10,
+  "output_root": "/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-guard-20261016",
+  "baseline_registry_sha256": "defd52b2473532e51f477759566e49b5f2f8fc7e272d251e9f4b1f3d42cf208b"
+}

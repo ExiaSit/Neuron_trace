@@ -1,0 +1,40 @@
+{
+  "method_version": "v0.83",
+  "direct_inputs": true,
+  "raw_dir": "/media/pzy/U-Disk2/human_reconstruction/1um_img/img",
+  "mask_dir": "/media/pzy/U-Disk2/human_reconstruction/mask",
+  "soma_crop_dir": "/media/pzy/U-Disk2/human_reconstruction/soma_img",
+  "soma_seg_dir": "/media/pzy/U-Disk2/human_reconstruction/soma_seg",
+  "metadata_file": "/data/disk/Neuron_trace/metadata/meta_260804.csv",
+  "output_root": "../outputs/existing-mask-reconstruction",
+  "workers": 4,
+  "memory_budget_gb": 96,
+  "memory_reserve_gb": 32,
+  "minimum_stable_seconds": 120,
+  "skip_existing": true,
+  "python_executable": "/home/pzy/anaconda3/envs/hb_seg/bin/python",
+  "vaa3d_app2": "/home/pzy/Vaa3D_CentOS_64bit_v3.601/bin/vaa3d",
+  "vaa3d_resample": "/home/pzy/pzy/Vaa3D-x.1.1.4_Ubuntu/Vaa3D-x",
+  "soma_overrides_image_xyz": {
+    "132987": [
+      196,
+      196,
+      18
+    ]
+  },
+  "previous_swc_dirs": [
+    "/data/disk/v0.81/swc",
+    "/data/disk/C6.0/v0.81/pruning_swcs",
+    "/data/disk2/B4.5/v0.81/pruning_swcs",
+    "/data/disk3/120_130k/v0.81/pruning_swcs",
+    "/data/disk3/recovered_potential_neurons/reconstruction/v0.81/pruning_swcs"
+  ],
+  "app2_temp_dir": "/tmp/neuron-app2-v083",
+  "input_path_aliases": {
+    "/media/pzy/U-Disk2/human_reconstruction/1um_img/img": "/media/pzy/U-Disk2/human_reconstruction/1um_img"
+  },
+  "baseline_root": null,
+  "method_revision": "ring-guard-20261016",
+  "validated_baseline_registry": "../tests/baselines/validated-registry.json",
+  "input_mode": "prepared"
+}
