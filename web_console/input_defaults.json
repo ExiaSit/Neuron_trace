@@ -1,0 +1,9 @@
+{
+  "metadata_file": "/data/disk/Neuron_tracing_method/meta_261021.csv",
+  "v3d_root": "/mnt/hndb/Cell_Image",
+  "raw_dir": "/media/pzy/U-Disk2/human_reconstruction/1um_img/img",
+  "mask_dir": "/media/pzy/U-Disk2/human_reconstruction/mask",
+  "soma_crop_dir": "/media/pzy/U-Disk2/human_reconstruction/soma_img",
+  "soma_seg_dir": "/media/pzy/U-Disk2/human_reconstruction/soma_seg",
+  "neurite_seg_dir": "/media/pzy/U-Disk2/human_reconstruction/1um_neurite_seg"
+}

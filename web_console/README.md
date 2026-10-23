@@ -180,3 +180,12 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
 不使用该选项则只展示最后两步的合并变化。G-Cut 删除审计通过保留输入复算预处理，
 不重跑追踪或分离。补图核对原 mask、APP2、G-Cut、重采样和最终 SWC 的 SHA256；
 另存 ID_diagnostics.png，页面优先显示它，原比较图和完成检查点保留。
+
+## 输入路径默认值
+
+打开页面时自动填写 web_console/input_defaults.json 中的常用路径，目前使用
+16984 实验所在的原图、mask、胞体位置及分割目录，另提供 V3D 与神经突分割默认目录。
+所有默认路径都可编辑或通过“浏览服务器”修改；切换阶段不会重置已填写的值。
+“恢复默认路径”仅重置输入路径，不改变 ID、执行区间和 GPU。具体 V3D 子目录、
+原始分辨率 TIFF、已有重建结果根目录仍按实验选择；旧 APP2 留空继续按配置目录查找。
+管理员可编辑 input_defaults.json，下次刷新网页即生效，无需重启服务。

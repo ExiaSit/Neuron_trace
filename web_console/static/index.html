@@ -9,7 +9,7 @@
 <div class="preset-row"><span>快捷起点</span><button type="button" data-preset="1">原始 V3D</button><button type="button" data-preset="2">开始 1 µm 重采样</button><button type="button" data-preset="3">已有 1 µm 图像</button><button type="button" data-preset="7" class="selected">已有 mask</button><button type="button" data-preset="9">已有 APP2</button><button type="button" data-preset="11">已有重采样 SWC</button></div>
 <div class="range-row"><label>从这里开始<select name="start" id="start"></select></label><span class="range-arrow">→</span><label>到这里结束<select name="stop" id="stop"></select></label><label class="gpu">GPU 编号<input name="gpu_id" type="number" min="0" max="15" value="0"></label></div>
 <div id="stage-strip" class="stage-strip" aria-label="执行区间"></div><p class="note" id="range-note"></p>
-<div class="section-divider"><h3>输入位置</h3><span>浏览服务器目录，或直接填写绝对路径</span></div>
+<div class="section-divider"><h3>输入位置</h3><span>已预填常用路径，可直接修改或浏览服务器选择</span><button type="button" id="reset-input-paths">恢复默认路径</button></div>
 <div class="form-grid paths"><label class="full">元数据 CSV<input name="metadata_file" required placeholder="/data/.../metadata.csv"><small>cell_id、原图胞体 XYZ、XY/Z 分辨率（nm）；从 V3D 开始还需 v3dpbd_file。</small></label>
 <label data-key="source">V3D 根目录<input name="v3d_root" placeholder="/mnt/hndb/Cell_Image"></label><label data-key="source">具体 V3D 文件目录（可选）<input name="v3d_dir" placeholder="填写后优先按 ID 扫描此目录"></label>
 <label data-key="normalized">原始分辨率 TIFF 目录<input name="source_tif_dir" placeholder="/data/.../source_tif"><small>已归一化的 uint8 图像，尚未进行 1 µm 重采样。</small></label>

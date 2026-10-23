@@ -256,7 +256,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.file(STATIC/('index.html' if path=='/' else path.lstrip('/')))
         if path=='/api/bootstrap':
             cfg=json.loads((ROOT/'config.example.json').read_text())
-            return self.json(dict(stages=STAGES,metadata_file=cfg['metadata_file'],v3d_root=cfg['v3d_root'],
+            defaults=dict(metadata_file=cfg['metadata_file'],v3d_root=cfg['v3d_root'])
+            defaults_path=ROOT/'web_console/input_defaults.json'
+            if defaults_path.is_file():defaults.update(json.loads(defaults_path.read_text()))
+            return self.json(dict(stages=STAGES,input_defaults=defaults,metadata_file=cfg['metadata_file'],v3d_root=cfg['v3d_root'],
                                   revision=cfg['method_revision'],history_available=HISTORY.is_dir(),
                                   token_file=str(m.token_path),job_root=str(m.jobs)))
         if not self.authorized(q):return self.json({'error':'请先输入控制口令连接工作台'},401)
