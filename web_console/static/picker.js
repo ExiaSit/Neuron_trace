@@ -1,7 +1,7 @@
 'use strict';
 // Shares the existing authenticated API session; no local uploads or file reads.
 const picker={input:null,kind:'directory',path:'',parent:null,selected:null,offset:0,limit:100,total:0,sequence:0,timer:null};
-const pathLabels={metadata_file:'元数据 CSV',v3d_root:'V3D 根目录',v3d_dir:'具体 V3D 文件目录',source_tif_dir:'原始分辨率 TIFF 目录',raw_dir:'1 µm 灰度原图目录',mask_dir:'初始 mask 目录',soma_crop_dir:'胞体裁剪 / 位置 JSON 目录',soma_seg_dir:'胞体分割目录',neurite_seg_dir:'神经突分割目录',upstream_root:'已有重建结果根目录'};
+const pathLabels={previous_app2_dir:'旧版 APP2 目录',metadata_file:'元数据 CSV',v3d_root:'V3D 根目录',v3d_dir:'具体 V3D 文件目录',source_tif_dir:'原始分辨率 TIFF 目录',raw_dir:'1 µm 灰度原图目录',mask_dir:'初始 mask 目录',soma_crop_dir:'胞体裁剪 / 位置 JSON 目录',soma_seg_dir:'胞体分割目录',neurite_seg_dir:'神经突分割目录',upstream_root:'已有重建结果根目录'};
 
 function pickerSelection(path){
   picker.selected=path;

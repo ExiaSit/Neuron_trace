@@ -8,7 +8,7 @@ import matplotlib.patches as patches
 
 def save_comprehensive_summary(img, binary_img, dist_transform, gsdt_mask, global_soma_mask, pre_nms_coords, post_nms_coords, 
                                app2_tree, split_trees, target_soma_id, 
-                               save_path, nms_radius=20.0, title_prefix="", individual_output_dir=None):
+                               save_path, nms_radius=20.0, title_prefix="", individual_output_dir=None, short_leaf_audit=None):
     """
     生成 2x4 的网格图。
     排列顺序呈左开口的U形:
@@ -93,6 +93,16 @@ def save_comprehensive_summary(img, binary_img, dist_transform, gsdt_mask, globa
                 ax[6].plot([node[2], p_node[2]], [node[3], p_node[3]], color='cyan', linewidth=1.5, alpha=0.6)
     else:
         ax[6].text(0.5, 0.5, 'No App2 Trace Found', color='white', ha='center', va='center', fontsize=16, transform=ax[6].transAxes)
+
+    if short_leaf_audit is not None:
+        before = {n[0]: n for n in short_leaf_audit['before_nodes']}
+        for nid in short_leaf_audit['removed_ids']:
+            n = before[nid]
+            if n[6] in before:
+                p = before[n[6]]
+                ax[6].plot([n[2],p[2]], [n[3],p[3]], color='red', linewidth=2, zorder=10)
+            ax[6].plot(n[2],n[3],'rx',markersize=5,zorder=11)
+        ax[6].set_title(f"6. APP2 | red: {len(short_leaf_audit['removed_ids'])} short-leaf nodes removed",fontsize=14)
 
     # 图 7 (ax[5])：G-Cut All Segmented Neurons
     ax[5].imshow(img_show, cmap='gray')

@@ -413,6 +413,7 @@ def process_image_to_gcut(img_path, mask_path, swc_path, vis_output_dir,
     audit_path.write_text(json.dumps(dict(target_zyx=list(map(float,target_coord)) if target_coord is not None else None,centers_zyx=soma_coords,radii=[soma_radii[tuple(c)] if np.isfinite(soma_radii[tuple(c)]) else None for c in soma_coords]),indent=2))
     # =========================================================================
 
+    short_leaf_audit = None
     app2_tree = None
     split_trees = {}
     target_soma_id = None
@@ -447,6 +448,8 @@ def process_image_to_gcut(img_path, mask_path, swc_path, vis_output_dir,
                             
                     from algorithms.tracing.gcut_adapter import make_segmentor
                     segmentor = make_segmentor(str(temp_swc_path), str(temp_soma_txt))
+                    short_leaf_audit = segmentor.short_leaf_audit
+                    (Path(vis_output_dir)/'short-leaf-audit.json').write_text(json.dumps(short_leaf_audit,indent=2))
                     segmentor.segment(conditional='human', cell_type='neocortex')
                     gcut_neurons = segmentor.knife.assemble() 
                     
@@ -500,6 +503,7 @@ def process_image_to_gcut(img_path, mask_path, swc_path, vis_output_dir,
         img, binary_img, dist_transform, gsdt_mask, global_soma_mask, final_coords, soma_coords,
         app2_tree, split_trees, target_soma_id,
         combined_vis_path, nms_radius=NMS_RADIUS, title_prefix=img_path.name,
+        short_leaf_audit=short_leaf_audit,
         individual_output_dir=Path(vis_output_dir) / (img_path.stem + "_panels")
     )
 

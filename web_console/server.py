@@ -83,15 +83,32 @@ def tail(path,limit=48000):
 def artifacts(root,cid):
     result=[]
     # Scan only known figure/output directories, never raw source directories.
-    for folder in ['preparation_mips','app2_mips','mask_mips','gcut_mips','pruning_mips','comparisons','pruning_swcs',
+    for folder in ['mask_step_mips','gcut_audits','comparison_sources','preparation_mips','app2_mips','mask_mips','gcut_mips','pruning_mips','comparisons','pruning_swcs',
                    'trace_app2/down_sampled_swcs_app2','gcut_output/selected_for_pruning',
                    'gcut_output/selected_resampled_step1','regression_guard']:
         directory=root/folder
         if not directory.is_dir():continue
         for p in directory.iterdir():
             if p.suffix in {'.png','.swc','.json'} and re.match(rf'^(?:image_)?{re.escape(cid)}(?:[_.]|$)',p.name) and p.is_file():
+                if folder=='comparisons' and p.name==f'{cid}.png' and (directory/f'{cid}_diagnostics.png').is_file():continue
                 result.append(dict(path=str(p.relative_to(root)),name=p.name,group=folder,
                                    image=p.suffix=='.png',size=p.stat().st_size,mtime=p.stat().st_mtime_ns))
+    for item in result:
+        if not item['image']:continue
+        try:
+            if item['group']=='mask_step_mips':
+                info=json.loads((root/item['path']).with_suffix('.json').read_text())
+                note='复算验证' if info['provenance'].startswith('replayed') else '保留的历史快照' if info['provenance'].startswith('retained') else '合并变化；中间快照不可用' if info['provenance'].startswith('combined') else '运行时记录'
+                item['description']=f"新增 {info['added_voxels']:,} 体素 · 删除 {info['removed_voxels']:,} 体素 · {note}"
+            elif item['group']=='gcut_audits':
+                info=json.loads((root/item['path']).with_suffix('.json').read_text())
+                note=' · 根据保留输入复算' if info.get('provenance','').startswith('replayed') else ''
+                item['description']=f"短末梢规则删除 {len(info['removed_ids'])} 个节点；已排除胞体收缩与后续 G-Cut 分离"+note
+            elif item['group']=='comparisons':
+                info=json.loads((root/'comparison_sources'/f'{cid}_app2.json').read_text())
+                item['description']=('旧版 APP2 来源：'+info['path']+' · 坐标转换：'+info['transform']) if info['status']=='present' else '配置目录中没有匹配此 ID 的旧版 APP2'
+        except (OSError,ValueError,KeyError,TypeError):
+            pass  # The image can appear just before its atomic sidecar is published.
     return result
 
 

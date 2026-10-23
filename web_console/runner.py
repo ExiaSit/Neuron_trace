@@ -54,7 +54,7 @@ def code_digest():
 def parse_request(body):
     if not isinstance(body,dict): raise ValueError('请求必须是 JSON 对象')
     req = {k:body.get(k,'') for k in ['name','ids','metadata_file','v3d_root','v3d_dir',
-           'source_tif_dir','raw_dir','mask_dir','soma_crop_dir','soma_seg_dir','neurite_seg_dir','upstream_root']}
+           'previous_app2_dir','source_tif_dir','raw_dir','mask_dir','soma_crop_dir','soma_seg_dir','neurite_seg_dir','upstream_root']}
     for k,v in req.items():
         if not isinstance(v,str) or len(v)>4096: raise ValueError(f'{k} 格式不正确')
         req[k]=v.strip()
@@ -93,6 +93,8 @@ def base_config(req, job):
                workers=1,preprocess_workers=1,inference_batch_size=1,gpu_id=req['gpu_id'],
                baseline_root=None,validated_baseline_registry=None,previous_swc_dirs=[],
                soma_overrides_image_xyz={})
+    if req.get('previous_app2_dir'):
+        cfg['previous_app2_dirs']=[str(local_path(req['previous_app2_dir'],'旧版 APP2 目录'))]
     return cfg
 
 

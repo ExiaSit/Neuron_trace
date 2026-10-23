@@ -36,8 +36,13 @@ def previous_index(folders):
 
 def comparison_key(spec):
     p=worker.paths(spec)
+    from visualization.previous_app2 import resolve_previous_app2
+    previous_app2=resolve_previous_app2(spec)
     return hashlib.sha256(json.dumps(dict(
-        style='soma-core-full-v081-comparison-1',old=[engine.file_stamp(x) for x in spec['old_swcs']],
+        style='mask-history-previous-app2-2',
+        previous_app2=engine.file_stamp(previous_app2) if previous_app2 else None,
+        previous_app2_coordinates=spec['config'].get('previous_app2_coordinates','native'),
+        app2=engine.file_stamp(p['app2']),old=[engine.file_stamp(x) for x in spec['old_swcs']],
         inputs=[engine.file_stamp(x) for x in [spec['raw'],spec['mask'],p['mask'],p['final']]],
         metadata=spec['metadata']),sort_keys=True).encode()).hexdigest()
 

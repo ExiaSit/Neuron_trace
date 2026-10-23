@@ -137,3 +137,46 @@ node --check web_console/static/app.js
 测试覆盖真实 TIFF 重采样与裁剪、预览生成、区间依赖、输入重复/缺失、
 已完成结果跳过、元数据变化拒绝、外部 SWC 复制、立即停止子进程、API 认证、
 跨站请求和目录越界拒绝。真实样本与本次验证范围见 VALIDATION.txt。
+
+## 追查每次 mask 修复与短末梢删除
+
+在结果区的“查看结果”选择“Mask 每步变化”“最终比较”或“G-Cut 短末梢删除”。
+Mask 按 a–h 顺序显示八步：骨架及方向分析、信号重连、胞体补全、胞体与分支重连、
+连接厚度恢复、胞体根部补全、受约束延伸、根部测地线补全。
+每张图三列为本步前、本步后、本步增删，三行为 XY/XZ/YZ MIP；同一投影使用相同
+灰度范围。青色为 mask，红色为本步新增，黄色为本步删除。先在三维计算增删，再
+投影；统计单位是体素，不能把 MIP 面积当作体素数。一次重连也可能删除少量体素。
+图片逐步出现，PNG 和 JSON 记录保存在 mask_step_mips/，完整 CLI 清理临时 mask 后仍保留。
+
+最终比较增加旧版 APP2、当前 APP2 和两者叠加。配置 previous_app2_dirs 按目录顺序
+精确匹配 ID.swc 或 image_ID.swc，不会把 116984 当作 16984；第一份匹配结果优先。
+网页可通过“旧版 APP2 目录”选择服务器目录覆盖默认列表，留空使用 config.example.json。
+默认列表从 C6.0、B4.5 等 trace_app2/down_sampled_swcs_app2 目录查找。
+previous_app2_coordinates 默认为 native，即旧 Vaa3D 原生零起点坐标，仅在绘图内存中
+执行 y=height-1-y；已带 app2_native_to_image_zero_based_v2 或
+archived_app2_native_to_image_zero_based_v1 标记的文件直接使用图像坐标。
+无标记但已是图像坐标的自定义参考文件应在 CLI 配置中设为 image。
+comparison_sources/ 记录实际来源、SHA256 和转换方式。未匹配到时明确显示缺失；
+旧 APP2 仅供比较，不替换本次输出，与 previous_swc_dirs 独立。
+
+G-Cut 红线和叉号标记短末梢删除，青色表示保留部分。记录从胞体收缩之后开始、在
+G-Cut 分离之前结束，规则是“不计起始分叉点，不足两个节点”，不是两微米。
+gcut_audits/ 提供三视图、删除节点 ID、前后 SWC 和阈值说明；后续任务的 G-Cut 总图
+也会叠加删除标记。未删除任何节点时会显示 0。
+
+已有任务补图需要保留 a–f 中间 mask 和 G-Cut injected SWC/soma ID：
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+/home/pzy/anaconda3/envs/hb_seg/bin/python -m utils.backfill_diagnostics \
+  --spec /absolute/job/reconstruction/manifests/16984.json \
+  --previous-app2-dir /data/disk/C6.0/trace_app2/down_sampled_swcs_app2 \
+  --previous-app2-dir /data/disk2/B4.5/trace_app2/down_sampled_swcs_app2 \
+  --replay-continuation
+```
+
+仅在任务停止或完成后使用。旧任务缺少 g/h 快照时，--replay-continuation 单独复算，
+并要求最终 mask 与已有结果逐体素一致，否则拒绝发布分步图；图和页面明确标注复算。
+不使用该选项则只展示最后两步的合并变化。G-Cut 删除审计通过保留输入复算预处理，
+不重跑追踪或分离。补图核对原 mask、APP2、G-Cut、重采样和最终 SWC 的 SHA256；
+另存 ID_diagnostics.png，页面优先显示它，原比较图和完成检查点保留。

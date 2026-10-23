@@ -61,5 +61,12 @@
       "fold": 0,
       "checkpoint": "checkpoint_final.pth"
     }
-  }
+  },
+  "previous_app2_dirs": [
+    "/data/disk/C6.0/trace_app2/down_sampled_swcs_app2",
+    "/data/disk2/B4.5/trace_app2/down_sampled_swcs_app2",
+    "/data/disk3/120_130k/trace_app2/down_sampled_swcs_app2",
+    "/data/disk3/recovered_potential_neurons/reconstruction/trace_app2/down_sampled_swcs_app2"
+  ],
+  "previous_app2_coordinates": "native"
 }

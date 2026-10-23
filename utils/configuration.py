@@ -13,6 +13,7 @@ def load_config(path):
                 'vaa3d_app2','vaa3d_resample','app2_temp_dir','validated_baseline_registry',
                 'raw_dir','mask_dir','soma_crop_dir','soma_seg_dir']:
         if cfg.get(key):cfg[key]=absolute(cfg[key])
+    cfg['previous_app2_dirs']=[absolute(p) for p in cfg.get('previous_app2_dirs',[])]
     cfg['previous_swc_dirs']=[absolute(p) for p in cfg.get('previous_swc_dirs',[])]
     for model in cfg.get('models',{}).values():
         model['results']=absolute(model['results'])

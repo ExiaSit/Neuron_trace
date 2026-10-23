@@ -40,9 +40,19 @@ def make_segmentor(swc_path,soma_file_path):
     segmentor.handy_man=BoundedSomaPreprocessor(swc_path,soma_file_path,scale_z=1.0)
     segmentor.handy_man.extract_soma_ids({},size_threshold=None)
     segmentor.handy_man.soma_sinks()
-    before_pruning=len(segmentor.handy_man.tree_nodes.tree)
+    def snapshot():
+        return [[n.node_id,n.node_type,n.x,n.y,n.z,n.radius,n.parent_id]
+                for n in segmentor.handy_man.tree_nodes.tree.values()]
+    before_nodes=snapshot()
+    before_pruning=len(before_nodes)
     segmentor.handy_man.tree_nodes.prune_short_leaves(
         min_leaf_branch_length=2,stable_nodes=segmentor.handy_man.soma_ids)
+    after_nodes=snapshot()
+    segmentor.short_leaf_audit=dict(before_nodes=before_nodes,after_nodes=after_nodes,
+        removed_ids=sorted({n[0] for n in before_nodes}-{n[0] for n in after_nodes}),
+        soma_ids=sorted(segmentor.handy_man.soma_ids),min_leaf_branch_length=2,
+        rule='recursive terminal branches <2 nodes, excluding branch point; soma protected',
+        capture_point='after soma contraction, before G-Cut segmentation')
     segmentor.tree_nodes,segmentor.soma_ids=segmentor.handy_man.results()
     segmentor.knife=GCut()
     print(f'G-Cut: legacy short-leaf pruning (<2 nodes, soma protected): '

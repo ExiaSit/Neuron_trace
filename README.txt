@@ -346,3 +346,11 @@ docs/SOURCE_MAP.json 记录旧文件到新文件的对应关系。
 开始。先读 README.txt 和 docs/VALIDATION.txt；入口是 run_pipeline.py，
 使用 hb_seg，复制 config.json 配置独立输入输出目录。保留现有算法
 和回归保护，修改算法时运行 tests/ 并使用独立输出做回归比较。”
+
+逐步诊断图（2026-10-23）
+-----------------------
+网页结果区可选择“Mask 每步变化”，查看八步修复各自的前后与增删 MIP（XY/XZ/YZ）。
+红色是本步新增，黄色是本步删除；每张图带三维体素数与历史快照/复算说明。
+最终比较用 previous_app2_dirs 独立查找旧 APP2，并展示来源路径和新旧 APP2 叠加。
+G-Cut 短末梢删除以红线和叉号标记，提供删除 ID、前后 SWC 和三视图。
+详细使用方法、坐标约定和已有任务补图入口见 web_console/README.md。
