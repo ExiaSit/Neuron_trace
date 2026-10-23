@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Neuron Trace · v0.83 实验工作台</title><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%232e6259'/%3E%3Cpath d='M10 30L20 20V8M20 20L31 11M20 20L32 30' fill='none' stroke='white' stroke-width='3'/%3E%3C/svg%3E"><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Neuron Trace · v0.83 实验工作台</title><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%232e6259'/%3E%3Cpath d='M10 30L20 20V8M20 20L31 11M20 20L32 30' fill='none' stroke='white' stroke-width='3'/%3E%3C/svg%3E"><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script><script src="/picker.js" defer></script></head>
 <body><aside><a class="brand" href="/"><span class="brand-mark">⌘</span><span>NEURON TRACE<small>重建实验工作台</small></span></a><div class="version">v0.83 <span>WORKSPACE</span></div><button class="primary wide" id="new-task">＋ 新建实验</button><div class="sidebar-label">实验记录 <button id="refresh" aria-label="刷新实验列表">↻</button></div><nav id="jobs"><p class="muted">连接后查看实验记录</p></nav><div class="sidebar-bottom"><span class="connection" id="connection">○ 尚未连接</span><button id="history">历史结果浏览 ↗</button><a id="old-gallery" target="_blank" rel="noopener">打开原版图库 ↗</a></div></aside>
 <main><header><div><span class="eyebrow">RECONSTRUCTION LAB</span><h1>从任意一步，继续探索。</h1><p>选择输入和执行区间，追踪每个 neuron 的重建过程。</p></div><div class="revision"><span class="dot"></span>本机执行 · 数据留在服务器<small id="revision"></small></div></header>
 <section class="panel" id="login-panel"><div class="section-heading"><span class="step-label">连接</span><div><h2>连接实验控制台</h2><p>首次连接输入服务器控制口令；浏览器会话内自动保持。</p></div></div><form id="login-form" class="login-row"><input id="token" type="password" autocomplete="current-password" aria-label="控制口令" placeholder="粘贴控制口令" required><button class="primary" type="submit">连接工作台</button></form><p class="muted">口令文件：<code id="token-file"></code></p></section>
@@ -9,7 +9,7 @@
 <div class="preset-row"><span>快捷起点</span><button type="button" data-preset="1">原始 V3D</button><button type="button" data-preset="2">开始 1 µm 重采样</button><button type="button" data-preset="3">已有 1 µm 图像</button><button type="button" data-preset="7" class="selected">已有 mask</button><button type="button" data-preset="9">已有 APP2</button><button type="button" data-preset="11">已有重采样 SWC</button></div>
 <div class="range-row"><label>从这里开始<select name="start" id="start"></select></label><span class="range-arrow">→</span><label>到这里结束<select name="stop" id="stop"></select></label><label class="gpu">GPU 编号<input name="gpu_id" type="number" min="0" max="15" value="0"></label></div>
 <div id="stage-strip" class="stage-strip" aria-label="执行区间"></div><p class="note" id="range-note"></p>
-<div class="section-divider"><h3>输入位置</h3><span>填写服务器上的绝对路径</span></div>
+<div class="section-divider"><h3>输入位置</h3><span>浏览服务器目录，或直接填写绝对路径</span></div>
 <div class="form-grid paths"><label class="full">元数据 CSV<input name="metadata_file" required placeholder="/data/.../metadata.csv"><small>cell_id、原图胞体 XYZ、XY/Z 分辨率（nm）；从 V3D 开始还需 v3dpbd_file。</small></label>
 <label data-key="source">V3D 根目录<input name="v3d_root" placeholder="/mnt/hndb/Cell_Image"></label><label data-key="source">具体 V3D 文件目录（可选）<input name="v3d_dir" placeholder="填写后优先按 ID 扫描此目录"></label>
 <label data-key="normalized">原始分辨率 TIFF 目录<input name="source_tif_dir" placeholder="/data/.../source_tif"><small>已归一化的 uint8 图像，尚未进行 1 µm 重采样。</small></label>
@@ -27,4 +27,15 @@
 <footer>Neuron Trace · v0.83　<span>Mask 修复 / APP2 / G-Cut / 信号剪枝</span></footer>
 </main><dialog id="image-viewer"><div class="viewer-bar"><strong id="image-name"></strong><a id="image-original" target="_blank" rel="noopener">打开原图 ↗</a><button id="close-image">关闭 ×</button></div><div class="image-canvas"><img id="large-image" alt="放大的阶段结果"></div></dialog>
 <dialog id="history-dialog"><form id="history-form"><h2>查看历史结果</h2><p>读取原 v0.83 图库，不执行重建。</p><label>Neuron ID<input id="history-id" inputmode="numeric" pattern="[0-9]+" value="16984" required></label><div class="dialog-actions"><button type="button" id="close-history">取消</button><button class="primary" type="submit">查看结果</button></div></form></dialog>
+<dialog id="path-picker" aria-labelledby="picker-title">
+  <div class="picker-heading"><div><h2 id="picker-title">选择服务器文件夹</h2><p id="picker-help">选择后自动填入输入位置。</p></div><button type="button" id="picker-close" aria-label="关闭文件选择器">关闭 ×</button></div>
+  <nav id="picker-roots" class="picker-roots" aria-label="常用数据目录"></nav>
+  <form id="picker-location-form" class="picker-location"><button type="button" id="picker-up">↑ 上级</button><input id="picker-location" aria-label="当前服务器目录" placeholder="输入绝对路径" autocomplete="off"><button type="submit">前往</button></form>
+  <nav id="picker-breadcrumbs" class="picker-breadcrumbs" aria-label="当前目录层级"></nav>
+  <label class="picker-search">搜索当前目录<input id="picker-search" type="search" placeholder="按名称筛选文件或文件夹" autocomplete="off"></label>
+  <div id="picker-error" role="alert" hidden></div>
+  <div id="picker-list" class="picker-list" aria-label="服务器目录内容" aria-busy="false"></div>
+  <div class="picker-pagination"><span id="picker-count" aria-live="polite"></span><button type="button" id="picker-prev">上一页</button><button type="button" id="picker-next">下一页</button></div>
+  <div class="picker-footer"><div><span id="picker-selection-label">当前文件夹</span><code id="picker-selection"></code></div><button type="button" id="picker-cancel">取消</button><button type="button" class="primary" id="picker-confirm">选择此文件夹</button></div>
+</dialog>
 </body></html>

@@ -16,7 +16,7 @@ import tifffile
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from web_console.runner import parse_request, preflight, required_keys, run_job
-from web_console.server import Manager, Handler, contained
+from web_console.server import Manager, Handler, contained, browse_directory
 from utils.case_worker import save_json
 
 
@@ -114,6 +114,13 @@ class ConsoleTests(unittest.TestCase):
             with urlopen(url+'/') as r:self.assertIn(b'Neuron Trace',r.read())
             with self.assertRaises(HTTPError) as cm:urlopen(url+'/api/jobs')
             self.assertEqual(cm.exception.code,401)
+            with self.assertRaises(HTTPError) as cm:urlopen(url+'/api/browse')
+            self.assertEqual(cm.exception.code,401)
+            with patch('web_console.server.BROWSE_ROOTS',[self.root]):
+                browse=Request(url+'/api/browse?kind=file',headers={'X-Control-Token':self.manager.token})
+                with urlopen(browse) as r:
+                    files=json.load(r)
+                    self.assertIn('meta.csv',[x['name'] for x in files['entries']])
             request=Request(url+'/api/check',data=json.dumps(self.body).encode(),headers={'Content-Type':'application/json','X-Control-Token':self.manager.token})
             with urlopen(request) as r:self.assertTrue(json.load(r)['ok'])
             request.add_header('Origin','http://different-host.test')
@@ -141,6 +148,60 @@ class ConsoleTests(unittest.TestCase):
         self.assertTrue(not psutil.pid_exists(pid) or psutil.Process(pid).status()==psutil.STATUS_ZOMBIE)
         state=json.loads((job/'progress.json').read_text())
         self.assertEqual(state['status'],'interrupted');self.assertIn('42:2',state['completed'])
+
+
+class ServerPickerTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory();self.root=Path(self.tmp.name)
+        (self.root/'images').mkdir();(self.root/'胞体 数据').mkdir()
+        (self.root/'.hidden').mkdir()
+        (self.root/'meta.csv').write_text('cell_id\n42\n')
+        (self.root/'OTHER.CSV').write_text('cell_id\n43\n')
+        (self.root/'raw.tif').touch()
+
+    def tearDown(self):self.tmp.cleanup()
+
+    def browse(self,path='',**kwargs):
+        return browse_directory(path,roots=[self.root],**kwargs)
+
+    def test_csv_selection_and_directory_selection_are_distinct(self):
+        d=self.browse();self.assertIsNone(d['parent'])
+        self.assertEqual({x['name'] for x in d['entries']},{'images','胞体 数据'})
+        d=self.browse(str(self.root/'meta.csv'),kind='file')
+        self.assertEqual(d['path'],str(self.root));self.assertEqual(d['selected'],str(self.root/'meta.csv'))
+        self.assertEqual([x['directory'] for x in d['entries']],[True,True,False,False])
+        self.assertIn('OTHER.CSV',[x['name'] for x in d['entries']])
+        with self.assertRaises(ValueError):self.browse(str(self.root/'raw.tif'),kind='file')
+        with self.assertRaises(ValueError):self.browse(str(self.root/'meta.csv'))
+
+    def test_pagination_filter_and_empty_folder(self):
+        for i in range(205):(self.root/f'batch-{i:03}').mkdir()
+        first=self.browse(query='BATCH-');second=self.browse(query='batch-',offset=100)
+        last=self.browse(query='batch-',offset=200)
+        self.assertEqual(first['total'],205);self.assertTrue(first['has_more'])
+        self.assertEqual(len(first['entries']),100)
+        self.assertEqual(len({x['path'] for x in first['entries']+second['entries']}),200)
+        self.assertEqual(len(last['entries']),5);self.assertFalse(last['has_more'])
+        empty=self.browse(str(self.root/'胞体 数据'))
+        self.assertEqual(empty['entries'],[]);self.assertEqual(empty['parent'],str(self.root))
+
+    def test_symlink_navigation_and_boundary(self):
+        (self.root/'inside').symlink_to(self.root/'images',target_is_directory=True)
+        (self.root/'outside').symlink_to('/etc',target_is_directory=True)
+        (self.root/'broken').symlink_to(self.root/'missing')
+        items=self.browse()['entries']
+        self.assertIn('inside',[x['name'] for x in items]);self.assertNotIn('outside',[x['name'] for x in items])
+        self.assertNotIn('broken',[x['name'] for x in items])
+        self.assertEqual(self.browse(str(self.root/'inside'))['path'],str(self.root/'images'))
+        for value in [str(self.root/'outside'),str(self.root/'../etc'),'relative/path']:
+            with self.assertRaises(ValueError):self.browse(value)
+
+    def test_invalid_options_and_unreadable_directory(self):
+        for options in [dict(kind='shell'),dict(offset=-1),dict(offset=100001)]:
+            with self.assertRaises(ValueError):self.browse(**options)
+        with self.assertRaisesRegex(ValueError,'不存在'):self.browse(str(self.root/'missing'))
+        with patch('web_console.server.os.scandir',side_effect=PermissionError):
+            with self.assertRaisesRegex(ValueError,'没有权限'):self.browse()
 
 
 if __name__=='__main__':unittest.main()

@@ -24,6 +24,48 @@ from utils.case_worker import save_json
 STATIC=Path(__file__).parent/'static'
 READABLE={'.png','.jpg','.jpeg','.webp','.swc','.tif','.tiff','.json','.log','.txt'}
 HISTORY=Path('/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-guard-20261016')
+BROWSE_ROOTS=[Path('/data'),Path('/mnt'),Path('/media'),Path.home()]
+
+
+def browse_directory(value='',kind='directory',query='',offset=0,roots=None):
+    """Authenticated picker metadata only; never read or serve input contents."""
+    if kind not in ('directory','file'):raise ValueError('选择类型无效')
+    if not isinstance(offset,int) or not 0<=offset<=100000:raise ValueError('分页位置无效')
+    if len(value)>4096 or len(query)>256:raise ValueError('路径或搜索文本过长')
+    roots=[p.resolve() for p in (BROWSE_ROOTS if roots is None else roots) if p.is_dir()]
+    if not roots:raise ValueError('没有可浏览的数据目录')
+    def allowed(p):return any(p==r or r in p.parents for r in roots)
+    raw=Path(value) if value else roots[0]
+    if not raw.is_absolute():raise ValueError('请输入服务器上的绝对路径')
+    path=raw.resolve()
+    if not allowed(path):raise ValueError('请从提供的数据目录中选择文件或文件夹')
+    selected=None
+    if path.is_file():
+        if kind!='file' or path.suffix.lower()!='.csv':raise ValueError('元数据请选择 CSV 文件')
+        selected=str(path);path=path.parent
+    if not path.is_dir():raise ValueError('目录不存在，请选择上级目录或常用位置')
+    entries=[];query=query.casefold()
+    try:
+        with os.scandir(path) as scan:
+            for entry in scan:
+                if entry.name.startswith('.') or query not in entry.name.casefold():continue
+                try:
+                    link=entry.is_symlink()
+                    # Avoid per-file stat on large image directories.
+                    directory=entry.is_dir(follow_symlinks=False)
+                    if not directory and not link and (kind=='directory' or Path(entry.name).suffix.lower()!='.csv'):continue
+                    resolved=Path(entry.path).resolve() if link else Path(entry.path)
+                    if not allowed(resolved):continue
+                    if link:directory=entry.is_dir()
+                    if not directory and (kind=='directory' or resolved.suffix.lower()!='.csv' or not entry.is_file()):continue
+                    entries.append(dict(name=entry.name,path=str(resolved),directory=directory,symlink=link))
+                except (OSError,RuntimeError):continue
+    except PermissionError:raise ValueError('当前服务用户没有权限读取此目录')
+    entries.sort(key=lambda e:(not e['directory'],e['name'].casefold(),e['name']))
+    total=len(entries);limit=100
+    return dict(path=str(path),parent=str(path.parent) if allowed(path.parent) and path.parent!=path else None,
+                roots=list(map(str,roots)),entries=entries[offset:offset+limit],total=total,offset=offset,
+                limit=limit,has_more=offset+limit<total,selected=selected,kind=kind)
 
 
 def contained(root,relative):
@@ -193,7 +235,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def get(self):
         parsed=urlsplit(self.path);path=unquote(parsed.path);q=parse_qs(parsed.query);m=self.server.manager
-        if path in ('/','/index.html','/app.js','/style.css'):
+        if path in ('/','/index.html','/app.js','/picker.js','/style.css'):
             return self.file(STATIC/('index.html' if path=='/' else path.lstrip('/')))
         if path=='/api/bootstrap':
             cfg=json.loads((ROOT/'config.example.json').read_text())
@@ -201,6 +243,9 @@ class Handler(BaseHTTPRequestHandler):
                                   revision=cfg['method_revision'],history_available=HISTORY.is_dir(),
                                   token_file=str(m.token_path),job_root=str(m.jobs)))
         if not self.authorized(q):return self.json({'error':'请先输入控制口令连接工作台'},401)
+        if path=='/api/browse':
+            return self.json(browse_directory(q.get('path',[''])[0],q.get('kind',['directory'])[0],
+                                              q.get('q',[''])[0],int(q.get('offset',['0'])[0])))
         if path=='/api/jobs':return self.json(m.all())
         if path=='/api/job':
             job=m.directory(q.get('id',[''])[0]);data=m.summary(job)
