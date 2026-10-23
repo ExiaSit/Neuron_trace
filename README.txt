@@ -88,28 +88,175 @@ docs/                       来源映射、算法说明和本次验证记录
 可从任意当前工作目录执行。配置中的相对路径始终相对于配置文件。
 run.sh 使用 hb_seg Python；如果移动环境，更新 run.sh 与配置中的 Python。
 
-分段运行
---------
-只做到初始 mask：run.sh --ids 17254 --stop 6
-准备完成后重建：run.sh --ids 17254 --start 7
-只重跑前处理区间：run.sh --ids 17254 --start 3 --stop 6
+如何从中间步骤开始执行
+----------------------
+本节以 17254 为例；多个样本可写成 --ids 17254,16047。
+“从已有 1 µm 图像开始”与“开始做 1 µm 重采样”是两个不同入口。
+跳过的上游步骤不会自动补做，必须先准备对应的文件。
 
-01–06 也支持 python 对应脚本 --config ... --ids ...。
-07–13 的单样本调试入口使用 --spec output_root/manifests/ID.json。
-07 单独运行时包含六轮基础修复和受约束延伸。
-完整批处理和自动断点记录请统一使用 run_pipeline.py。
+1. 当前入口支持范围
 
-从已有 img/mask 开始
---------------------
-编辑 configs/from_existing_mask.json 的 raw_dir、mask_dir、soma_crop_dir、
-soma_seg_dir、metadata_file 和 output_root，然后运行：
+统一入口 run.sh / run_pipeline.py：
+  --start：支持 1、2、3、4、5、6、7，默认 1。
+  --stop：支持 1、2、3、4、5、6、13，默认 13。
+  --start 7：跳过前处理，执行 mask 修复到最终比较的全部重建步骤。
+  --stop 13：执行到完整重建结束。
 
-  /data/disk/Neuron_tracing_method/v0.83/run.sh \
-    --config /data/disk/Neuron_tracing_method/v0.83/configs/from_existing_mask.json \
-    --ids 17254
+目前不支持 --start 9 --stop 11，也不支持 --stop 7。
+第 08–13 步需要通过单阶段脚本调试，见第 5 小节。
+input_mode="prepared" 会跳过全部前处理，直接进入重建；不能用它执行 01–06。
 
-省略 --ids 时，处理所有匹配且稳定的输入。缺失、重复或仍在迁移中的
-文件会记录到 skipped-inputs.json。此入口不复制或软链接输入图像到输出目录。
+2. 建立独立测试配置
+
+以下变量可在同一个 Bash 终端中复用：
+
+  V083_DIR=/data/disk/Neuron_tracing_method/v0.83
+  PY083=/home/pzy/anaconda3/envs/hb_seg/bin/python
+  cp "$V083_DIR/config.example.json" "$V083_DIR/config.test.local.json"
+  CFG083="$V083_DIR/config.test.local.json"
+
+编辑 config.test.local.json，填写 metadata_file、v3d_root、prepared_root、
+output_root、models 和 gpu_id。前处理入口保留 input_mode="v3d"。
+配置中的相对路径以配置文件所在目录为基准，移动配置文件时要重新核对。
+下文 /你的数据/ 和 /你的结果/ 都是占位路径，使用前必须替换。
+
+同一次任务中断后，重新运行相同命令可续跑，已完成阶段会跳过。
+--start/--stop 选择执行区间，不代表强制重算已有结果。
+更换重建代码或参数时使用新的 output_root；前处理输入、模型或参数变化时，
+也使用新的 prepared_root。不要把旧 status/manifests 直接复制进新实验冒充检查点。
+
+3. 从重采样、已有 1 µm 图像或前处理区间开始
+
+提前准备的文件如下，路径均相对于配置中的 prepared_root：
+
+  开始步骤     必需的直接上游文件
+  02 重采样    source_tif/17254.tif：原始分辨率、已归一化的 uint8 灰度图
+  03 胞体裁剪  img/17254_0000.tif：已重采样到 1 µm 的灰度图
+  04 胞体分割  soma_img/17254_0000.tif 和 soma_img/17254.json
+  05 神经突分割 img/17254_0000.tif
+  06 合并      neurite_seg/17254.tif、soma_seg/17254.tif、soma_img/17254.json
+
+如果继续执行后续步骤，还要满足那些步骤的输入要求。例如从 05 开始并执行
+到 06，除了原图，还必须已有胞体分割和位置 JSON；完整重建始终需要原图。
+胞体位置 JSON 应由 03_crop_soma.py 生成，或使用经核对兼容的已有记录。
+
+元数据需包含 cell_id、v3dpbd_file、soma_x/y/z、xy_resolution、z_resolution。
+当前代码即使从 02/03 开始，也会读取 v3dpbd_file 来构造来源路径。
+没有原始 V3D、只复用 TIFF 时，保留该字段并将 v3d_dir 设为 null；
+从 02 起不会要求原始 V3D 文件存在。胞体坐标仍按原图坐标及原始分辨率换算，
+不要只把分辨率改成 1000 而不处理坐标。
+
+  # 开始做 1 µm 重采样，只执行这一步
+  "$V083_DIR/run.sh" --config "$CFG083" --ids 17254 --start 2 --stop 2
+
+  # 从原始分辨率 TIFF 开始，重采样并完成全部流程
+  "$V083_DIR/run.sh" --config "$CFG083" --ids 17254 --start 2
+
+  # 已有 1 µm 图像，从胞体裁剪开始，只做到初始 mask
+  "$V083_DIR/run.sh" --config "$CFG083" --ids 17254 --start 3 --stop 6
+
+  # 初始 mask 和辅助输入齐全后，继续全部重建
+  "$V083_DIR/run.sh" --config "$CFG083" --ids 17254 --start 7
+
+01–06 也支持单脚本入口，例如只做胞体裁剪：
+  "$PY083" "$V083_DIR/03_crop_soma.py" --config "$CFG083" --ids 17254
+
+--check 可检查依赖和部分输入，但不是完整的逐阶段输入验证。
+特别是从 02–06 开始时，仍需按上表核对 TIFF/JSON；v3d 模式的 --check
+还会检查分割模型，即使本次只准备执行重采样。
+
+4. 从外部已有 img/mask 开始修复
+
+  cp "$V083_DIR/configs/from_existing_mask.json" \
+     "$V083_DIR/configs/test-mask.local.json"
+  MASK_CFG083="$V083_DIR/configs/test-mask.local.json"
+
+编辑新配置中的以下字段；这里只展示需要修改的部分，其他字段保留模板内容：
+
+  {
+    "input_mode": "prepared",
+    "raw_dir": "/你的数据/1um_img",
+    "mask_dir": "/你的数据/initial_mask",
+    "soma_crop_dir": "/你的数据/soma_img",
+    "soma_seg_dir": "/你的数据/soma_seg",
+    "metadata_file": "/你的数据/metadata.csv",
+    "output_root": "/你的结果/v083_mask_test"
+  }
+
+每个 ID 必须有 1 µm 灰度原图、同坐标同尺寸的初始 mask、胞体裁剪位置 JSON、
+胞体分割 mask 和元数据。soma_crop_dir 在这个入口用于查找位置 JSON。
+只有一张 mask 不足以完成修复，算法还需要原图信号和胞体辅助信息。
+output_root 必须与上述四个输入目录分开，不能互相包含。
+
+  # 检查匹配和依赖
+  "$V083_DIR/run.sh" --config "$MASK_CFG083" --ids 17254 --start 7 --check
+
+  # mask 修复 → APP2 → G-Cut → SWC 重采样 → 剪枝 → 回归保护 → 比较图
+  "$V083_DIR/run.sh" --config "$MASK_CFG083" --ids 17254 --start 7
+
+初始 mask 不被覆盖，修复结果写入 output_root/mask/17254.tif。
+省略 --ids 且配置未指定 neuron_ids 时，处理所有匹配且稳定的输入。
+缺失、重复或仍在迁移中的文件记录到 output_root/skipped-inputs.json。
+minimum_stable_seconds 默认 120；刚写完的文件可能暂时被跳过，稳定后重跑。
+此入口不复制或软链接输入图像到输出目录。
+
+5. 单独执行 mask 修复、APP2、G-Cut 或剪枝
+
+前提：已有与当前实验匹配的 output_root/manifests/17254.json，以及所需上游结果。
+manifest 由正式重建任务生成；--check 不生成 manifest。
+manifest 内保存输入、元数据和输出配置，修改外部配置文件不会自动更新它。
+请在独立调试结果目录操作，不要与同一目录中的批处理同时运行。
+
+  SPEC083=/你的结果/v083_mask_test/manifests/17254.json
+
+  # 仅修复 mask：包含六轮基础修复、受约束延伸和弯曲根部补全
+  "$PY083" "$V083_DIR/07_reconnect_mask.py" --spec "$SPEC083"
+
+  # APP2：需要 output_root/mask/17254.tif 及原图/胞体信息
+  "$PY083" "$V083_DIR/08_trace_app2.py" --spec "$SPEC083"
+
+  # G-Cut：还需要 trace_app2/down_sampled_swcs_app2/17254.swc
+  "$PY083" "$V083_DIR/09_separate_gcut.py" --spec "$SPEC083"
+
+  # 重采样：需要 gcut_output/selected_for_pruning/17254.swc
+  "$PY083" "$V083_DIR/10_resample_swc.py" --spec "$SPEC083"
+
+  # 剪枝：还需要 gcut_output/selected_resampled_step1/17254.swc
+  "$PY083" "$V083_DIR/11_prune_swc.py" --spec "$SPEC083"
+
+  # 可选的后续步骤：历史回归保护、最终比较图
+  "$PY083" "$V083_DIR/12_guard_regression.py" --spec "$SPEC083"
+  "$PY083" "$V083_DIR/13_compare_results.py" --spec "$SPEC083"
+
+上面列出的 SWC 相对路径均位于 manifest 配置的 output_root 下。
+07 使用阶段检查点，已完成的修复可能跳过；08–13 单独执行不会更新完整流水线
+的阶段完成记录，也不会自动使下游结果失效。重新运行 09 后，应依次运行 10、11，
+按实验需要再执行 12、13，避免查看旧的剪枝结果或比较图。
+完整批处理和自动断点记录请使用 run_pipeline.py。
+
+当前没有“只生成 manifest”的命令，也没有统一导入外部中间 SWC 的入口。
+因此，全新外部数据若只想修复 mask 就停止，或直接从外部 G-Cut/SWC 结果开始，
+仍需另行准备正确的 manifest 和上述目录布局，不能只传 --start/--stop 完成。
+
+6. 测试算法效果与查看输出
+
+默认历史回归保护可能恢复受支持的旧分支或选择旧基线。若要在独立实验中
+观察当前算法本身的结果，可在启动新任务前将测试配置设为：
+
+  {
+    "baseline_root": null,
+    "validated_baseline_registry": null
+  }
+
+这是配置片段。baseline_root 始终必须为 null；关闭登记表只用于明确选择的
+独立实验，不代表该实验经过历史回归保护。已经生成的 manifest 可能仍含
+guard_baseline_root，不能只改外部配置就认为它失效，应使用新的 output_root。
+保留登记表时，查看 regression_guard/17254.json 的 decision，确认最终结果
+是否经过恢复或基线替换。修改登记表设置也应使用新的 output_root。
+
+主要查看 output_root 下的 mask_mips/、gcut_mips/、pruning_mips/ 和 comparisons/；
+最终 SWC 在 pruning_swcs/。阶段失败查看 logs/ 和 status/。
+前处理失败则查看 prepared_root/preparation-summary.json 和 prepared_root/logs/。
 
 输出和命名
 ----------
