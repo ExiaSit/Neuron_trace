@@ -66,6 +66,14 @@ class ConsoleTests(unittest.TestCase):
         tifffile.imwrite(self.source/'image_42.tif',np.zeros((3,3,3),np.uint8))
         with self.assertRaisesRegex(ValueError,'重复'):preflight(parse_request(self.body))
 
+    def test_metadata_io_error_identifies_file_without_starting_job(self):
+        with patch('web_console.runner.read_metadata',side_effect=OSError(5,'Input/output error')):
+            with self.assertRaises(ValueError) as caught:self.manager.create(self.body)
+        self.assertIn(str(self.meta),str(caught.exception))
+        self.assertIn('读取元数据 CSV 失败',str(caught.exception))
+        self.assertIn('尚未启动重建',str(caught.exception))
+        self.assertEqual(list(self.manager.jobs.iterdir()),[])
+
     def test_actual_resample_crop_job_and_preview(self):
         created=self.manager.create(self.body);done=self.wait_job(created['id'])
         self.assertEqual(done['progress']['status'],'complete',done['progress'])

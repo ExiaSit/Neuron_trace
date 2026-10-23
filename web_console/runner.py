@@ -106,7 +106,12 @@ def preflight(req):
     import tifffile
     cfg=base_config(req,Path('/unused'))
     cfg['metadata_file']=str(local_path(req['metadata_file'],'metadata_file'))
-    table=read_metadata(cfg)
+    try:
+        table=read_metadata(cfg)
+    except OSError as exc:
+        raise ValueError(f"读取元数据 CSV 失败：{cfg['metadata_file']}。"
+                         f"系统错误：{exc}。请检查该文件及所在磁盘是否可正常读取，"
+                         "或选择一份已核实的完整元数据文件；尚未启动重建。") from exc
     needed=required_keys(req['start'],req['stop'])
     indexes={}
     for key in sorted(needed & INPUT_FIELDS.keys()):

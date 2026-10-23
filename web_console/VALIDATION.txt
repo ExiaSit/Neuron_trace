@@ -60,3 +60,15 @@ HTTP 测试确认未认证的 /api/browse 返回 401。
 已部署并实测 /data 目录、/data/disk 名称过滤及 metadata CSV 预选，全部 200，
 响应约 3–5 ms；/picker.js 返回 200。JavaScript 语法及 git diff --check 通过。
 部署前确认无活动任务；未启动新的重建任务。浏览器视觉验证限制仍同上。
+
+2026-10-23：元数据 I/O 错误定位与提示改进
+用户配置 meta_261021.csv 在输入检查阶段报 errno 5。
+直接二进制顺序读取 /data/disk/Neuron_tracing_method/meta_261021.csv，
+读取 76,546,048 字节（73 MiB）后下一块读取失败，独立于 pandas 和 CSV 编码。
+文件总大小 105,444,025 字节；没有改写或尝试修复该文件。
+/data/disk/Neuron_trace/metadata/meta_260804.csv 完整读取成功。
+两份 CSV 的 16984 记录中 cell_id、soma_x/y/z、xy_resolution、z_resolution、
+v3dpbd_file 均相同；使用旧 CSV 和截图其余输入的 07–13 预检通过，未启动重建。
+这一比对仅适用于 16984，不代表两份元数据对所有 ID 都等价。
+界面现在明确指出元数据文件路径和系统错误，避免只显示裸 errno。
+新增模拟读取失败的回归测试，确认不创建任务；13 项控制台测试通过。
