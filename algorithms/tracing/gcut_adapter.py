@@ -1,10 +1,67 @@
-"""Apply bounded soma contraction and the legacy G-Cut short-leaf pruning.
+"""Bounded soma contraction and terminal pruning by 3-D path length.
 
-Before 1-um resampling, recursively remove terminal branches with fewer than
-two nodes (excluding their starting branch point), protecting known somas.
-This is a node-count rule, not a physical-length threshold.
+Run after soma contraction and before G-Cut separation / 1-um resampling.
+Coordinates are 1-um image XYZ. Include the attachment edge to the surviving
+branch point or soma in each terminal path's length; protect known somas.
 """
-def make_segmentor(swc_path,soma_file_path):
+import math
+
+SHORT_LEAF_MIN_LENGTH_UM = 7.75
+
+
+def prune_short_leaves_by_length(tree, stable_nodes, min_length_um=SHORT_LEAF_MIN_LENGTH_UM):
+    """Iteratively delete terminal paths strictly shorter than min_length_um.
+
+    Keep the attachment node. Update child counts after each deletion, as in
+    the former node-count rule. Process leaves by ID for reproducible results.
+    Return one audit record per deletion event (a path may contain many nodes).
+    """
+    if not math.isfinite(min_length_um) or min_length_um <= 0:
+        raise ValueError('Short-leaf length threshold must be positive and finite')
+    if tree.empty():
+        return []
+    protected = set(stable_nodes) | {tree.root_id()}
+    removed_branches = []
+    iteration = 0
+    while True:
+        iteration += 1
+        tree.find_children(rescan=True)
+        changed = False
+        for leaf_id in sorted(tree.leaves()):
+            if leaf_id in protected or leaf_id not in tree.tree:
+                continue
+            path, seen, length, current = [], set(), 0.0, leaf_id
+            while True:
+                node = tree.tree[current]
+                parent_id = node.parent_id
+                if parent_id not in tree.tree:
+                    raise ValueError(f'Missing parent {parent_id} for terminal node {current}')
+                parent = tree.tree[parent_id]
+                edge_length = math.dist((node.x, node.y, node.z), (parent.x, parent.y, parent.z))
+                if not math.isfinite(edge_length):
+                    raise ValueError(f'Non-finite terminal edge at node {current}')
+                path.append(current)
+                seen.add(current)
+                length += edge_length
+                if parent_id in protected or tree.n_children(parent_id) > 1:
+                    break
+                if parent_id in seen:
+                    raise ValueError('Cycle in terminal branch')
+                current = parent_id
+            if length < min_length_um:
+                # Remove from the tip upward; each node is a leaf at removal.
+                for nid in path:
+                    tree.children[tree.tree[nid].parent_id].remove(nid)
+                    tree.children.pop(nid)
+                    tree.tree.pop(nid)
+                removed_branches.append(dict(node_ids=path, anchor_id=parent_id,
+                                             length_um=length, iteration=iteration))
+                changed = True
+        if not changed:
+            return removed_branches
+
+
+def make_segmentor(swc_path,soma_file_path,min_leaf_length_um=SHORT_LEAF_MIN_LENGTH_UM):
     from neuron_segmentation import NeuronSegmentation
     from gcut.preprocess import HandyMan
     from gcut.gcut import GCut
@@ -45,17 +102,21 @@ def make_segmentor(swc_path,soma_file_path):
                 for n in segmentor.handy_man.tree_nodes.tree.values()]
     before_nodes=snapshot()
     before_pruning=len(before_nodes)
-    segmentor.handy_man.tree_nodes.prune_short_leaves(
-        min_leaf_branch_length=2,stable_nodes=segmentor.handy_man.soma_ids)
+    removed_branches=prune_short_leaves_by_length(
+        segmentor.handy_man.tree_nodes,segmentor.handy_man.soma_ids,min_leaf_length_um)
     after_nodes=snapshot()
     segmentor.short_leaf_audit=dict(before_nodes=before_nodes,after_nodes=after_nodes,
         removed_ids=sorted({n[0] for n in before_nodes}-{n[0] for n in after_nodes}),
-        soma_ids=sorted(segmentor.handy_man.soma_ids),min_leaf_branch_length=2,
-        rule='recursive terminal branches <2 nodes, excluding branch point; soma protected',
+        soma_ids=sorted(segmentor.handy_man.soma_ids),min_leaf_branch_length_um=min_leaf_length_um,
+        removed_branches=removed_branches,
+        removed_length_um=sum(branch['length_um'] for branch in removed_branches),
+        length_metric='3-D path length including attachment edge; 1-um image XYZ',
+        comparison='strictly_less_than',leaf_order='ascending_node_id',
+        rule=f'iterative terminal path length <{min_leaf_length_um:g} um; attachment node and somas protected',
         capture_point='after soma contraction, before G-Cut segmentation')
     segmentor.tree_nodes,segmentor.soma_ids=segmentor.handy_man.results()
     segmentor.knife=GCut()
-    print(f'G-Cut: legacy short-leaf pruning (<2 nodes, soma protected): '
+    print(f'G-Cut: short-leaf pruning (<{min_leaf_length_um:g} um, soma protected): '
           f'{before_pruning} -> {len(segmentor.tree_nodes.tree)} nodes',flush=True)
     return segmentor
 

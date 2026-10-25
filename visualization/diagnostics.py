@@ -96,9 +96,12 @@ def short_leaf_figure(raw, audit, path, provenance='recorded'):
         ax.set_ylim(bg.shape[0]-.5, -.5)
         ax.set_title(plane)
         ax.axis('off')
+    threshold = (f'<{audit["min_leaf_branch_length_um"]:g} um path length'
+                 if 'min_leaf_branch_length_um' in audit else
+                 f'<{audit.get("min_leaf_branch_length", 2):g} nodes')
     fig.suptitle(f'G-Cut short-leaf removal: {len(nodes)} -> {len(audit["after_nodes"])} nodes; '
                  f'{len(removed)} removed\nCyan: retained | Red + crosses: removed | '
-                 f'<2 nodes, soma protected\nAfter soma contraction, before segmentation | {provenance}')
+                 f'{threshold}, soma protected\nAfter soma contraction, before segmentation | {provenance}')
     fig.tight_layout(rect=(0, 0, 1, .88))
     save_figure(fig, path)
 

@@ -105,7 +105,9 @@ def artifacts(root,cid):
             elif item['group']=='gcut_audits':
                 info=json.loads((root/item['path']).with_suffix('.json').read_text())
                 note=' · 根据保留输入复算' if info.get('provenance','').startswith('replayed') else ''
-                item['description']=f"短末梢规则删除 {len(info['removed_ids'])} 个节点；已排除胞体收缩与后续 G-Cut 分离"+note
+                rule=(f"路径长度 < {info['min_leaf_branch_length_um']:g} µm" if 'min_leaf_branch_length_um' in info
+                      else f"末梢节点数 < {info.get('min_leaf_branch_length',2)}")
+                item['description']=f"{rule}：删除 {len(info['removed_ids'])} 个节点；胞体受保护；已排除胞体收缩与后续 G-Cut 分离"+note
             elif item['group']=='comparisons':
                 info=json.loads((root/'comparison_sources'/f'{cid}_app2.json').read_text())
                 item['description']=('旧版 APP2 来源：'+info['path']+' · 坐标转换：'+info['transform']) if info['status']=='present' else '配置目录中没有匹配此 ID 的旧版 APP2'

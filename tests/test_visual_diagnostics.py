@@ -61,10 +61,10 @@ class DiagnosticTests(unittest.TestCase):
             segmentor=make_segmentor(str(swc),str(somas));audit=segmentor.short_leaf_audit
             self.assertNotIn(2,{n[0] for n in audit['before_nodes']})
             self.assertNotIn(2,audit['removed_ids'])
-            self.assertEqual(audit['removed_ids'],[4])
+            self.assertEqual(audit['removed_ids'],[5,6])
             self.assertIn(3,{n[0] for n in audit['before_nodes']})
             write_short_leaf_audit(audit,np.ones((3,25,25),dtype=np.uint8),root,'42')
-            self.assertEqual(json.loads((root/'gcut_audits/42_short_leaves.json').read_text())['removed_ids'],[4])
+            self.assertEqual(json.loads((root/'gcut_audits/42_short_leaves.json').read_text())['removed_ids'],[5,6])
             names={a['name'] for a in artifacts(root,'42')}
             self.assertIn('42_short_leaves.png',names)
             self.assertIn('42_short_leaves_before.swc',names)
