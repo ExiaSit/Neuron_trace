@@ -33,38 +33,31 @@ def prepare(spec, state, stage_run):
         save_json(p['root']/'status'/f"{spec['id']}.json",state)
 
 def run(spec):
-    p=setup_config(spec);cfg=spec['config'];r=p['root'];cid=spec['id']
-    import pandas as pd
-    meta=pd.DataFrame([spec['metadata']], index=[int(cid)])
+    """Finish mask repair with guarded continuation (g); no geodesic pass (h)."""
+    p=setup_config(spec);r=p['root'];cid=spec['id']
     from algorithms.mask_repair.guarded_continuation import extend
     m=spec['metadata'];xyz=[float(m[k])*float(m[res])/1000 for k,res in [('soma_x','xy_resolution'),('soma_y','xy_resolution'),('soma_z','z_resolution')]]
     raw=tifffile.imread(p['raw']);mask=tifffile.imread(p['mask'])>0
     from visualization.diagnostics import record_mask_step
     work=r/'mask_steps'/cid
-    mask_run.atomic_tiff(work/'continuation_input/connected-mask.tif',mask.astype('uint8')*255)
-    if cfg.get('review_supplement_only'):
-        from algorithms.mask_repair.root_geodesic import supplement
-        result,audit=supplement(raw,mask,xyz,p['soma_json'],p['soma_mask'])
-        report=dict(geodesic_supplement=audit,original_preserved=bool(np.all(result[mask])),added_voxels=int(np.count_nonzero(result&~mask)))
-    else:
-        result,report=extend(raw,mask,xyz,p['soma_json'],p['soma_mask'])
-        mask_run.atomic_tiff(work/'g/connected-mask.tif',result.astype('uint8')*255)
-        record_mask_step(spec,6,work/'continuation_input/connected-mask.tif',work/'g/connected-mask.tif')
-        # Preserve the validated curved soma-root repair in fresh runs too.
-        from algorithms.mask_repair.root_geodesic import supplement
-        result,root_audit=supplement(raw,result,xyz,p['soma_json'],p['soma_mask'])
-        report['geodesic_supplement']=root_audit
-        report['added_voxels']=int(np.count_nonzero(result&~mask))
-    mask_run.validate_result(result.astype('uint8')*255,mask)
-    mask_run.atomic_tiff(work/'h/connected-mask.tif',result.astype('uint8')*255)
-    record_mask_step(spec,7,work/('continuation_input' if cfg.get('review_supplement_only') else 'g')/'connected-mask.tif',work/'h/connected-mask.tif')
-    mask_run.atomic_tiff(p['mask'],result.astype('uint8')*255)
+    before=work/'continuation_input/connected-mask.tif'
+    after=work/'g/connected-mask.tif'
+    mask_run.atomic_tiff(before,mask.astype('uint8')*255)
+    result,report=extend(raw,mask,xyz,p['soma_json'],p['soma_mask'])
+    result=result.astype('uint8')*255
+    mask_run.validate_result(result,mask)
+    mask_run.atomic_tiff(after,result)
+    record_mask_step(spec,6,before,after)
+    mask_run.atomic_tiff(p['mask'],result)
+    report.update(root_geodesic_enabled=False,final_mask_step='g',
+                  original_preserved=bool(np.all(result[mask]>0)),
+                  added_voxels=int(np.count_nonzero((result>0)&~mask)))
     save_json(r/'logs'/cid/'continuity.json',report)
 
 if __name__=="__main__":
     import argparse
     from utils.case_worker import run_worker
-    parser=argparse.ArgumentParser(description='六轮 mask 修复、受约束延伸与根部补全')
+    parser=argparse.ArgumentParser(description='六轮 mask 修复与受约束延伸（不执行根部测地线补全）')
     parser.add_argument('--spec',required=True)
     args=parser.parse_args()
     run_worker(Path(args.spec).resolve(),mask_only=True)

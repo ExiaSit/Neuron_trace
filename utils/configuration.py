@@ -18,7 +18,7 @@ def load_config(path):
     for model in cfg.get('models',{}).values():
         model['results']=absolute(model['results'])
     cfg.setdefault('method_version','v0.83a')
-    cfg.setdefault('method_revision','multiaxis-overlapping-mip-20261025')
+    cfg.setdefault('method_revision','multiaxis-overlapping-mip-no-root-geodesic-20261026')
     from algorithms.mask_repair.multiscale_mip import configuration
     cfg['mask_mip']=configuration(cfg.get('mask_mip', {}))
     cfg['direct_inputs']=True

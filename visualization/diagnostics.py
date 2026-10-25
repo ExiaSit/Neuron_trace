@@ -4,6 +4,7 @@ import os
 import tempfile
 import numpy as np
 
+# Retain the old eighth title for explicitly replaying historical h snapshots.
 MASK_TITLES = ['Skeleton and direction', 'Signal reconnect', 'Soma completion',
                'Soma-neurite reconnect', 'Connection thickness', 'Soma-root repair',
                'Guarded continuation', 'Root geodesic supplement']

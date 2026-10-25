@@ -21,6 +21,33 @@ def sha(path):
     return digest.hexdigest()
 
 
+def replay_continuation_steps(spec, raw, before):
+    """Replay the steps recorded by that run, never silently add a removed step."""
+    from algorithms.mask_repair.guarded_continuation import extend
+    p=paths(spec)
+    audit_path=p['root']/'logs'/spec['id']/'continuity.json'
+    audit=json.loads(audit_path.read_text())
+    if audit.get('root_geodesic_enabled') is False:
+        historical_h=False
+    elif 'geodesic_supplement' in audit:
+        historical_h=True
+    else:
+        raise ValueError('Original continuity audit does not identify mask steps; refusing to guess')
+    m=spec['metadata'];xyz=[float(m[k])*float(m[res])/1000 for k,res in
+                           [('soma_x','xy_resolution'),('soma_y','xy_resolution'),('soma_z','z_resolution')]]
+    if historical_h and spec['config'].get('review_supplement_only'):
+        from algorithms.mask_repair.root_geodesic import supplement
+        final,_=supplement(raw,before,xyz,p['soma_json'],p['soma_mask'])
+        return [(7,before,final)]
+    middle,_=extend(raw,before,xyz,p['soma_json'],p['soma_mask'])
+    steps=[(6,before,middle)]
+    if historical_h:
+        from algorithms.mask_repair.root_geodesic import supplement
+        final,_=supplement(raw,middle,xyz,p['soma_json'],p['soma_mask'])
+        steps.append((7,middle,final))
+    return steps
+
+
 def backfill(spec, replay=False):
     p=paths(spec);root=p['root'];cid=spec['id'];work=root/'mask_steps'/cid
     core=[p[k] for k in ['mask','app2','selected','resampled','final'] if p[k].is_file()]
@@ -33,15 +60,10 @@ def backfill(spec, replay=False):
         print(f'{cid}: mask {letter}: {results[letter]}',flush=True)
     raw=tifffile.imread(p['raw']);before=tifffile.imread(work/'f/connected-mask.tif')>0
     if replay:
-        from algorithms.mask_repair.guarded_continuation import extend
-        from algorithms.mask_repair.root_geodesic import supplement
-        m=spec['metadata'];xyz=[float(m[k])*float(m[res])/1000 for k,res in
-                               [('soma_x','xy_resolution'),('soma_y','xy_resolution'),('soma_z','z_resolution')]]
-        middle,_=extend(raw,before,xyz,p['soma_json'],p['soma_mask'])
-        final,_=supplement(raw,middle,xyz,p['soma_json'],p['soma_mask'])
-        if not np.array_equal(final,tifffile.imread(p['mask'])>0):
+        steps=replay_continuation_steps(spec,raw,before)
+        if not np.array_equal(steps[-1][2],tifffile.imread(p['mask'])>0):
             raise ValueError('Replay differs from saved final mask; refusing to publish separated steps')
-        for index,prev,next_mask in [(6,before,middle),(7,middle,final)]:
+        for index,prev,next_mask in steps:
             letter='abcdefgh'[index]
             results[letter]=mask_transition(raw,prev,next_mask,root/'mask_step_mips'/f'{cid}_{index+1:02d}_{letter}.png',
                 f'{cid} | {index+1:02d} {MASK_TITLES[index]}',
@@ -51,7 +73,7 @@ def backfill(spec, replay=False):
             print(f'{cid}: replay mask {letter}: {results[letter]}',flush=True)
     else:
         mask_transition(raw,before,tifffile.imread(p['mask']),root/'mask_step_mips'/f'{cid}_07_combined.png',
-                        f'{cid} | Combined continuation + root supplement',provenance='combined; intermediate unavailable')
+                        f'{cid} | Final repair changes since step f',provenance='combined; intermediate unavailable')
     setup_config(spec);load_module('gcut')
     from algorithms.tracing.gcut_adapter import make_segmentor
     vis=root/'gcut_output'/cid

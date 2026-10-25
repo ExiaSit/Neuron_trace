@@ -1,3 +1,16 @@
+v0.83a update: remove root geodesic supplement (2026-10-26)
+--------------------------------------------------------
+Fresh reconstruction runs finish mask repair after guarded continuation (g).
+The independent root_geodesic.supplement pass (h) is no longer invoked, even
+with the obsolete review_supplement_only option. Stage f soma-root repair and
+the root anchoring inside guarded continuation are unchanged. APP2 reads g's
+output directly. continuity.json records root_geodesic_enabled=false and
+final_mask_step=g. New runs produce seven mask-step figures, not eight.
+Historical h figures remain readable. Historical diagnostic replay uses h
+only when the saved original continuity audit explicitly records that pass,
+and still requires exact final-mask equality. Use a new experiment/output root;
+previous 300-case reports describe the prior code, not this update.
+
 2026-10-23: G-Cut short-leaf preprocessing port
 Revision: ring-guard-20261016-short-leaves-20261023
 

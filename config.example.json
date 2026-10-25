@@ -27,7 +27,7 @@
   ],
   "app2_temp_dir": "/tmp/neuron-app2-v083",
   "baseline_root": null,
-  "method_revision": "multiaxis-overlapping-mip-20261025",
+  "method_revision": "multiaxis-overlapping-mip-no-root-geodesic-20261026",
   "validated_baseline_registry": null,
   "input_mode": "v3d",
   "neuron_ids": [],
