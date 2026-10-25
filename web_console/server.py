@@ -18,11 +18,13 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
-from web_console.runner import STAGES, ROOT, parse_request, preflight
+from web_console.runner import STAGES, ROOT, parse_request
+from web_console.versions import METHODS, DEFAULT_METHOD, method_root, preflight_request as preflight
+from web_console.comparison import comparison_artifacts, comparison_paths, comparison_summary, registered_root
 from utils.case_worker import save_json
 
 STATIC=Path(__file__).parent/'static'
-READABLE={'.png','.jpg','.jpeg','.webp','.swc','.tif','.tiff','.json','.log','.txt'}
+READABLE={'.png','.jpg','.jpeg','.webp','.swc','.tif','.tiff','.json','.log','.txt','.csv'}
 HISTORY=Path('/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-guard-20261016')
 BROWSE_ROOTS=[Path('/data'),Path('/mnt'),Path('/media'),Path.home()]
 
@@ -143,7 +145,10 @@ class Manager:
         progress=json.loads(p.read_text()) if p.exists() else {'status':'queued','completed':{}}
         return dict(id=job.name,name=record['request']['name'],request=record['request'],
                     created_at=record['created_at'],output_root=str(job/'reconstruction'),
-                    prepared_root=str(job/'prepared'),progress=progress,active=self.active==job.name)
+                    prepared_root=str(job/'prepared'),progress=progress,active=self.active==job.name,
+                    read_only=record.get('read_only',False), note=record.get('note',''),
+                    method_version=record['request'].get('method_version','v0.83'),
+                    comparison_available=bool(record.get('comparison_source')))
 
     def all(self):
         return sorted([self.summary(p.parent) for p in self.jobs.glob('*/job.json')],key=lambda x:x['created_at'],reverse=True)
@@ -161,15 +166,17 @@ class Manager:
     def start(self,jid):
         with self.lock:
             if self.active:raise ValueError('已有运行中的任务')
-            job=self.directory(jid);state=self.summary(job)['progress']
+            job=self.directory(jid);summary=self.summary(job);state=summary['progress']
+            if summary['read_only']:raise ValueError('这是只读导入结果；请用当前编号新建实验')
+            source_root=method_root(summary['method_version'])
             if state.get('status')=='complete':raise ValueError('该实验已完成；改变范围或参数请创建新实验')
             pause=job/'pause.request'
             if pause.exists():pause.unlink()
             state.update(status='running');save_json(job/'progress.json',state)
             log=(job/'worker.log').open('a')
             try:
-                self.process=subprocess.Popen([sys.executable,str(Path(__file__).parent/'runner.py'),'--job',str(job)],
-                                              cwd=ROOT,stdout=log,stderr=subprocess.STDOUT,start_new_session=True,
+                self.process=subprocess.Popen([sys.executable,str(source_root/'web_console/runner.py'),'--job',str(job)],
+                                              cwd=source_root,stdout=log,stderr=subprocess.STDOUT,start_new_session=True,
                                               env=dict(os.environ,PYTHONUNBUFFERED='1',OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='1',MKL_NUM_THREADS='1'))
             finally:log.close()
             self.active=jid
@@ -259,7 +266,7 @@ class Handler(BaseHTTPRequestHandler):
             defaults=dict(metadata_file=cfg['metadata_file'],v3d_root=cfg['v3d_root'])
             defaults_path=ROOT/'web_console/input_defaults.json'
             if defaults_path.is_file():defaults.update(json.loads(defaults_path.read_text()))
-            return self.json(dict(stages=STAGES,input_defaults=defaults,metadata_file=cfg['metadata_file'],v3d_root=cfg['v3d_root'],
+            return self.json(dict(methods=[dict(id=k,label=v['label']) for k,v in METHODS.items()],default_method=DEFAULT_METHOD,stages=STAGES,input_defaults=defaults,metadata_file=cfg['metadata_file'],v3d_root=cfg['v3d_root'],
                                   revision=cfg['method_revision'],history_available=HISTORY.is_dir(),
                                   token_file=str(m.token_path),job_root=str(m.jobs)))
         if not self.authorized(q):return self.json({'error':'请先输入控制口令连接工作台'},401)
@@ -272,11 +279,19 @@ class Handler(BaseHTTPRequestHandler):
             cid=q.get('cell',[data['request']['ids'][0]])[0]
             if cid not in data['request']['ids']:raise ValueError('样本不属于本任务')
             data['artifacts']=artifacts(job/'reconstruction',cid)
+            if data['comparison_available']:
+                record=json.loads((job/'job.json').read_text())
+                data['artifacts']+=comparison_artifacts(record,cid)
+                data['comparison_summary']=comparison_summary(record,cid)
             data['pause_requested']=(job/'pause.request').exists() and data['active']
             current=data['progress'].get('current');log=q.get('log',[''])[0]
             if log and re.fullmatch(r'\d{1,12}-\d{2}',log):logpath=job/'logs'/f'{log}.log'
             elif current:logpath=job/'logs'/f"{current['id']}-{current['stage']:02d}.log"
             else:logpath=job/'worker.log'
+            if data['read_only']:
+                stage=int(log.rsplit('-',1)[1]) if log and re.fullmatch(r'\d{1,12}-\d{2}',log) else next((s for s in range(7,14) if f'{cid}:{s}' in data['progress'].get('failed',{})),13)
+                stage_key={7:'continuity',8:'app2',9:'gcut',10:'resample',11:'prune',12:'guard',13:'comparison'}.get(stage)
+                if stage_key:logpath=job/'reconstruction/logs'/cid/f'{stage_key}.log'
             data['log']=tail(logpath);data['log_name']=str(logpath.relative_to(job))
             return self.json(data)
         if path=='/api/history':
@@ -290,6 +305,13 @@ class Handler(BaseHTTPRequestHandler):
                 if relative not in {a['path'] for a in artifacts(root,q.get('cell',[''])[0])}:raise ValueError('未登记的结果文件')
             else:
                 job=m.directory(q.get('id',[''])[0]);root=job/'reconstruction'
+                scope=q.get('scope',[''])[0]
+                if scope:
+                    if scope!='comparison':raise ValueError('未知结果范围')
+                    cid=q.get('cell',[''])[0]
+                    record=json.loads((job/'job.json').read_text())
+                    root=registered_root(record,cid)
+                    if relative not in comparison_paths(cid):raise ValueError('未登记的对照文件')
             p=contained(root,relative)
             if p.suffix.lower() not in READABLE:raise ValueError('不支持的文件类型')
             return self.file(p,p.suffix.lower() not in {'.png','.jpg','.jpeg','.webp'})

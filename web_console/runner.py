@@ -69,8 +69,11 @@ def parse_request(body):
         req[k]=value
     if not 1<=req['start']<=req['stop']<=13: raise ValueError('阶段范围必须满足 1 ≤ 开始 ≤ 结束 ≤ 13')
     if not 0<=req['gpu_id']<=15: raise ValueError('GPU 编号须为 0–15')
+    from web_console.versions import DEFAULT_METHOD, method_root
+    req['method_version']=body.get('method_version',DEFAULT_METHOD)
+    method_root(req['method_version'])
     # Experimental console deliberately exposes candidate results, without historical substitution.
-    req['name']=req['name'][:80] or 'v0.83 实验'
+    req['name']=req['name'][:80] or req['method_version']+' 实验'
     return req
 
 

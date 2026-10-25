@@ -1,4 +1,4 @@
-# v0.83 重建实验工作台
+# v0.83 / v0.83a 重建实验工作台
 
 本机 Web 控制台，支持输入数据路径、选择 01–13 任意连续区间、后台执行、
 暂停/立即停止/续跑，以及按 neuron 查看阶段日志、图片和 SWC。
@@ -119,7 +119,7 @@ web_console/neuron-v083-console.service，部署到 ~/.config/systemd/user/。
 独立启动（不要与同一状态目录的现有服务同时运行）：
 
 ```bash
-cd /data/disk/Neuron_tracing_method/v0.83
+cd /data/disk/Neuron_tracing_method/v0.83a
 /home/pzy/anaconda3/envs/hb_seg/bin/python -m web_console.server \
   --host 127.0.0.1 --port 8766 \
   --state-root /data/disk/Neuron_tracing_method/results/v083-console
@@ -128,7 +128,7 @@ cd /data/disk/Neuron_tracing_method/v0.83
 ## 验证
 
 ```bash
-cd /data/disk/Neuron_tracing_method/v0.83
+cd /data/disk/Neuron_tracing_method/v0.83a
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
   /home/pzy/anaconda3/envs/hb_seg/bin/python -m unittest discover -s tests -v
 node --check web_console/static/app.js
@@ -189,3 +189,27 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
 “恢复默认路径”仅重置输入路径，不改变 ID、执行区间和 GPU。具体 V3D 子目录、
 原始分辨率 TIFF、已有重建结果根目录仍按实验选择；旧 APP2 留空继续按配置目录查找。
 管理员可编辑 input_defaults.json，下次刷新网页即生效，无需重启服务。
+
+## v0.83 / v0.83a 与 300 例对照
+
+控制台由 v0.83a 工作树启动，新建实验默认选择 v0.83a，也可以选择 v0.83。
+v0.83a 的 Mask 修复使用三方向、重叠、多厚度 MIP；该选择不额外改变 G-Cut 算法。
+输入检查和执行都使用所选版本自己的代码，通过独立进程隔离 Python 模块。
+旧实验未记录版本时按 v0.83 处理；续跑仍校验代码指纹，不会默默切换算法。
+
+已完成的配对实验可由管理员注册为两个只读实验：
+
+```bash
+/home/pzy/anaconda3/envs/hb_seg/bin/python -m web_console.import_comparison \
+  --state-root /data/disk/Neuron_tracing_method/results/v083-console \
+  --cohort-root /home/pzy/neuron_validation/v083a_mip_300_20261025
+```
+
+该命令幂等，不复制或修改原结果；reconstruction/ 链接至已有输出。
+页面提供三方向 Mask 对照、总体统计、逐例 CSV、节点数、总长度、平均分支长度、
+分支覆盖风险和两版最终 SWC。这里的分支覆盖是原图信号启发式指标，不等于人工真值。
+原实验失败与严格 SWC 结构检查失败会保留，不能把“只读导入”当作全部通过。
+只读实验不能续跑，点击“用当前编号新建实验”仅复制当前样本的输入与版本配置。
+注册 300 例的浏览不受新建任务最多 200 例限制；不开放 HTTP 任意路径导入接口。
+
+代码、测试、文档可提交 Git；实际对照结果、实验记录、控制口令与本机服务备份不提交。
