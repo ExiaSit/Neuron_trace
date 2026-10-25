@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""v0.83: V3D → TIFF → 1 µm → segmentation → mask repair → reconstruction."""
+"""v0.83a: V3D → TIFF → 1 µm → segmentation → mask repair → reconstruction."""
 from pathlib import Path
 import argparse, json, os, subprocess, sys
 from utils import bootstrap

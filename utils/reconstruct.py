@@ -143,7 +143,8 @@ def main():
             subprocess.run([sys.executable,str(Path(__file__).resolve()),'--render',str(manifest),str(sidecar),key],
                            env=env,stdout=stream,stderr=subprocess.STDOUT,check=True)
         print(f'[{cid}] 比较图已加载 {len(spec["old_swcs"])} 个 v0.81 SWC'+('（该 ID 无旧结果）' if not spec['old_swcs'] else ''),flush=True)
-    print(f'已索引 {len(index)} 个 ID 的 v0.81 结果；全量采用 ring-guard-20261016；重新计算 mask，禁用旧延伸结果复用；历史已验证样本启用内容核验回归保护。',flush=True)
+    history_policy='启用内容核验' if registry else '关闭'
+    print(f'已索引 {len(index)} 个 ID 的 v0.81 结果；当前 {cfg["method_version"]} / {cfg["method_revision"]}；重新计算 mask；历史基线替换：{history_policy}。',flush=True)
     if args.refresh_only:
         import fcntl
         lock=(root/'.run.lock').open('a');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)

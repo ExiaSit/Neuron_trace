@@ -28,7 +28,7 @@
   "app2_temp_dir": "/tmp/neuron-app2-v083",
   "baseline_root": null,
   "method_revision": "multiaxis-overlapping-mip-20261025",
-  "validated_baseline_registry": "./tests/baselines/validated-registry.json",
+  "validated_baseline_registry": null,
   "input_mode": "v3d",
   "neuron_ids": [],
   "v3d_root": "/mnt/hndb/Cell_Image",

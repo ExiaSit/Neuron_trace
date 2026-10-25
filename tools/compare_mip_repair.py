@@ -42,6 +42,19 @@ def sha(path):
     return h.hexdigest()
 
 
+def saved_records(output):
+    # Atomic-write scratch files can survive an interrupted driver; they are
+    # not extra cases and must never be counted or parsed as completed records.
+    return [json.loads(p.read_text()) for p in (output/'cases').glob('*.json')
+            if p.stem.isdecimal()]
+
+
+def valid_reconstruction_pair(record):
+    return record.get('status') == 'complete' and all(
+        'final' in record.get(side+'_swc',{}) and side+'_final_sha256' in record
+        for side in ('baseline','candidate'))
+
+
 def code_hash(root):
     files = sorted([*root.glob('*.py'), *root.glob('algorithms/**/*.py'),
                     *root.glob('utils/**/*.py'), *root.glob('vendor/**/*.py'),
@@ -255,20 +268,22 @@ def run_case(rec, args, signatures):
         for key, code, manifest, root in zip(('baseline', 'candidate'), codes, manifests, roots):
             if key+'_mask' in result['errors']:
                 continue
+            metrics = {}
             try:
                 result['stages'][key+'_reconstruction_seconds'] = launch(
                     [sys.executable, str(code/'utils/case_worker.py'), '--spec', str(manifest)],
                     output/'logs'/f'{cid}-{key}-full.log', args.timeout)
-                result[key+'_swc'] = {}
                 for stage, sub in [('app2','trace_app2/down_sampled_swcs_app2'),
                                    ('gcut','gcut_output/selected_for_pruning'),
                                    ('resample','gcut_output/selected_resampled_step1'),('final','pruning_swcs')]:
-                    result[key+'_swc'][stage] = swc_metrics(root/sub/f'{cid}.swc')
+                    metrics[stage] = swc_metrics(root/sub/f'{cid}.swc')
+                result[key+'_swc'] = metrics
                 result[key+'_final_sha256'] = sha(root/'pruning_swcs'/f'{cid}.swc')
             except Exception as exc:
                 result['errors'][key+'_full'] = str(exc)
+                if metrics:result[key+'_swc_partial'] = metrics
             save(record_path, result)
-        if 'baseline_swc' in result and 'candidate_swc' in result:
+        if all('final' in result.get(side+'_swc',{}) for side in ('baseline','candidate')):
             from algorithms.tracing.regression_guard import foreign_context, foreign_contacts
             m = rec['metadata']
             target = [m['soma_z']*m['z_resolution']/1000,
@@ -297,22 +312,33 @@ def run_case(rec, args, signatures):
 
 def summary(output, records, signatures):
     masks = [r for r in records if 'mask' in r]
-    paired = [r for r in records if 'baseline_swc' in r and 'candidate_swc' in r]
+    paired = [r for r in records if valid_reconstruction_pair(r)]
     data = dict(processed=len(records), complete=sum(r['status']=='complete' for r in records),
                 failed=sum(r['status']=='failed' for r in records),
                 paired_masks=len(masks), changed_masks=sum(r['mask']['different_voxels']>0 for r in masks),
                 paired_reconstructions=len(paired),
+                baseline_valid_reconstructions=sum('final' in r.get('baseline_swc',{}) for r in records),
+                candidate_valid_reconstructions=sum('final' in r.get('candidate_swc',{}) for r in records),
                 new_foreign_mask_contact_cases=[r['id'] for r in masks if r['mask'].get('new_foreign_mask_contacts')],
                 new_foreign_swc_contact_cases=[r['id'] for r in records if r.get('new_foreign_swc_contacts')],
                 changed_final_swcs=sum(not r.get('final_tables_equal',
                                             r['baseline_final_sha256']==r['candidate_final_sha256']) for r in paired),
                 code=signatures, errors={r['id']:r['errors'] for r in records if r['errors']},
                 note='No manual ground truth; voxel/length differences are not biological accuracy improvements.')
+    retention_path = output/'branch_retention.json'
+    if retention_path.exists():
+        retention = json.loads(retention_path.read_text())
+        data['branch_retention'] = {k:v for k,v in retention.items() if k != 'records'}
     save(output/'summary.json', data)
     rows = []
     for r in records:
         row = dict(id=r['id'], status=r['status'], selection=r['selection'], errors=json.dumps(r['errors']))
         row.update(r.get('stages',{}))
+        audit_path = output/'branch_audits'/f'{r["id"]}.json'
+        if audit_path.exists():
+            audit = json.loads(audit_path.read_text())
+            row['baseline_supported_coverage_by_candidate'] = audit['baseline_supported_coverage_by_candidate']
+            row['candidate_supported_coverage_by_baseline'] = audit['candidate_supported_coverage_by_baseline']
         if 'mask' in r:
             m = r['mask']
             for field in ('different_voxels','candidate_extra_voxels','candidate_absent_voxels','mask_iou'):
@@ -337,8 +363,17 @@ def summary(output, records, signatures):
 
 def write_index(output, records, data):
     rows = []
-    ordered = sorted(records,key=lambda r:(r['status'] != 'failed',
-                                          -r.get('mask',{}).get('different_voxels',0),int(r['id'])))
+    def link(relative,label):
+        if (output/relative).is_file():
+            return f'<a href="{relative}">{label}</a>'
+        return f'<span>{label}未生成</span>'
+    def ordering(r):
+        audit_path = output/'branch_audits'/f'{r["id"]}.json'
+        audit = json.loads(audit_path.read_text()) if audit_path.exists() else {}
+        foreign = r.get('new_foreign_swc_contacts') or r.get('mask',{}).get('new_foreign_mask_contacts')
+        return (r['status'] != 'failed',not bool(foreign),not audit.get('below_98_percent_retention',False),
+                -r.get('mask',{}).get('different_voxels',0),int(r['id']))
+    ordered = sorted(records,key=ordering)
     for r in ordered:
         cid = html.escape(r['id'])
         m = r.get('mask',{})
@@ -348,6 +383,12 @@ def write_index(output, records, data):
             v = values.get(key)
             return '-' if v is None else f'{v:,.2f}'
         flag = []
+        audit_path = output/'branch_audits'/f'{r["id"]}.json'
+        retention = '-'
+        if audit_path.exists():
+            audit = json.loads(audit_path.read_text())
+            retention = f'{100*audit["baseline_supported_coverage_by_candidate"]:.2f}%'
+            if audit['below_98_percent_retention']:flag.append('旧版信号支持分支覆盖<98%，需复核')
         if m.get('new_foreign_mask_contacts'):flag.append('新 mask 胞体接触')
         if r.get('new_foreign_swc_contacts'):flag.append('新 SWC 胞体接触')
         if r['errors']:flag.append(html.escape(json.dumps(r['errors'],ensure_ascii=False)))
@@ -356,25 +397,29 @@ def write_index(output, records, data):
                     f'<td>{a.get("nodes","-")} / {b.get("nodes","-")}</td>'
                     f'<td>{number(a,"length_um")} / {number(b,"length_um")}</td>'
                     f'<td>{number(a,"mean_branch_length_um")} / {number(b,"mean_branch_length_um")}</td>'
-                    f'<td><a href="comparisons/{cid}.png">mask三视图</a> · '
-                    f'<a href="baseline/comparisons/{cid}.png">旧重建</a> · '
-                    f'<a href="candidate/comparisons/{cid}.png">新重建</a> · '
-                    f'<a href="baseline/pruning_swcs/{cid}.swc">旧SWC</a> · '
-                    f'<a href="candidate/pruning_swcs/{cid}.swc">新SWC</a></td>'
+                    f'<td>{retention}</td>'
+                    f'<td>{link(f"comparisons/{cid}.png","mask三视图")} · '
+                    f'{link(f"baseline/comparisons/{cid}.png","旧重建")} · '
+                    f'{link(f"candidate/comparisons/{cid}.png","新重建")} · '
+                    f'{link(f"baseline/pruning_swcs/{cid}.swc","旧SWC")} · '
+                    f'{link(f"candidate/pruning_swcs/{cid}.swc","新SWC")} · '
+                    f'{link(f"cases/{cid}.json","逐例记录")}</td>'
                     f'<td>{"；".join(flag)}</td></tr>')
     title = (f'v0.83 → v0.83a：已处理 {data["processed"]}，完成 {data["complete"]}，'
              f'失败 {data["failed"]}，mask变化 {data["changed_masks"]}，最终SWC变化 {data["changed_final_swcs"]}')
     page = ('<!doctype html><html lang="zh"><meta charset="utf-8"><title>MIP 对比</title>'
             '<style>body{font:14px sans-serif;padding:24px;color:#17202a}table{border-collapse:collapse;width:100%}'
             'td,th{border-bottom:1px solid #ddd;padding:10px;text-align:left}th{position:sticky;top:0;background:#edf2f7}'
-            'a{color:#145ea8}tr:hover{background:#f7fafc}</style>'
+            'a{color:#145ea8}tr:hover{background:#f7fafc}td:last-child{max-width:360px;overflow-wrap:anywhere}</style>'
             f'<h2>{title}</h2><p>数值顺序：v0.83 / v0.83a。长度单位 µm。'
             '分支是根、分叉与末端之间的完整路径。没有人工真值，长度增加不代表质量提高。</p>'
             '<p>mask 图中红色为新版本多出的体素，黄色为相对旧版本缺少的体素；均为三维差异再投影。'
             '其他胞体接触依赖辅助分割，仅作风险提示。失败案例保留在表内。</p>'
-            '<p><a href="per_case.csv">逐例统计 CSV</a> · <a href="summary.json">汇总 JSON</a></p>'
+            '<p><a href="per_case.csv">逐例统计 CSV</a> · <a href="summary.json">汇总 JSON</a> · '
+            '<a href="branch_retention.json">信号支持分支保留检查</a> · '
+            '<a href="summary_metrics.png">统计图</a> · <a href="aggregate_metrics.json">阶段汇总</a></p>'
             '<table><thead><tr><th>ID</th><th>状态</th><th>mask差异体素</th><th>最终节点</th>'
-            '<th>最终总长度</th><th>平均分支长度</th><th>结果</th><th>提示</th></tr></thead><tbody>'
+            '<th>最终总长度</th><th>平均分支长度</th><th>旧分支覆盖</th><th>结果</th><th>提示</th></tr></thead><tbody>'
             +''.join(rows)+'</tbody></table></html>')
     (output/'index.html').write_text(page)
 
@@ -388,6 +433,7 @@ def main():
     ap.add_argument('--workers', type=int, default=6)
     ap.add_argument('--timeout', type=int, default=2400)
     ap.add_argument('--full', action='store_true', help='Also rerun APP2, G-Cut, resampling and pruning in both arms')
+    ap.add_argument('--report-only',action='store_true',help='Rebuild reports from saved records without rerunning or changing tested code identity')
     ap.add_argument('--ids', help='Optional smoke-test subset, comma separated')
     args = ap.parse_args()
     sys.path.insert(0, str(args.candidate_code))
@@ -396,6 +442,11 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     lock = (args.output/'.comparison.lock').open('a')
     fcntl.flock(lock, fcntl.LOCK_EX|fcntl.LOCK_NB)
+    if args.report_only:
+        experiment = json.loads((args.output/'experiment.json').read_text())
+        records = saved_records(args.output)
+        print(json.dumps(summary(args.output,records,experiment['code']),indent=2),flush=True)
+        return 0
     signatures = dict(baseline=code_hash(args.baseline_code), candidate=code_hash(args.candidate_code))
     cohort = json.loads(args.cohort.read_text())['cases']
     if args.ids:
@@ -422,8 +473,10 @@ def main():
     current = dict(baseline=code_hash(args.baseline_code),candidate=code_hash(args.candidate_code))
     if current != signatures:
         raise RuntimeError('Live code changed during experiment; comparison is invalid')
-    print(json.dumps(summary(args.output, records, signatures),indent=2),flush=True)
+    data = summary(args.output,records,signatures)
+    print(json.dumps(data,indent=2),flush=True)
+    return int(bool(data['failed']))
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

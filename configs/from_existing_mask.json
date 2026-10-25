@@ -35,7 +35,7 @@
   },
   "baseline_root": null,
   "method_revision": "multiaxis-overlapping-mip-20261025",
-  "validated_baseline_registry": "../tests/baselines/validated-registry.json",
+  "validated_baseline_registry": null,
   "input_mode": "prepared",
   "previous_app2_dirs": [
     "/data/disk/C6.0/trace_app2/down_sampled_swcs_app2",

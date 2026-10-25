@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run v0.83 for all stable matched inputs, reading source files in place."""
+"""Run stable matched inputs in place, with the configured method version."""
 import argparse
 import fcntl
 import hashlib
@@ -78,7 +78,7 @@ def validate_tiffs(raw, mask, soma):
 
 
 def main():
-    ap = argparse.ArgumentParser(description='v0.83: 所有已匹配样本，缺失或迁移中先跳过')
+    ap = argparse.ArgumentParser(description='v0.83a: 所有已匹配样本，缺失或迁移中先跳过')
     ap.add_argument('--config', required=True)
     ap.add_argument('--ids')
     ap.add_argument('--check', action='store_true')
@@ -126,7 +126,7 @@ def main():
                   *sorted((HERE/'algorithms').rglob('*.py')), *sorted((HERE/'visualization').rglob('*.py')),
                   *sorted((HERE/'vendor').rglob('*.py')), *sorted((HERE/'vendor').rglob('*.json'))]
     code_hash = hashlib.sha256(b''.join(p.read_bytes() for p in code_files)).hexdigest()
-    save_json(root/'runtime.json', {'version':'v0.83','revision':cfg['method_revision'],'source':str(HERE),'sha256':code_hash})
+    save_json(root/'runtime.json', {'version':cfg['method_version'],'revision':cfg['method_revision'],'source':str(HERE),'sha256':code_hash})
     save_json(root/'run-config.json', cfg)
     wanted = {str(int(x)) for x in args.ids.split(',')} if args.ids else None
     all_ids = set(raw_index) | set(mask_index) | duplicates
@@ -159,11 +159,11 @@ def main():
         if reason:
             skipped.append(dict(id=cid, reason=reason))
     save_json(root/'skipped-inputs.json', {'records':skipped})
-    plan = dict(version='v0.83', discovered_raw=len(raw_index), discovered_mask=len(mask_index),
+    plan = dict(version=cfg['method_version'], discovered_raw=len(raw_index), discovered_mask=len(mask_index),
                 matched_raw_mask=len(set(raw_index)&set(mask_index)), ready=len(ready), skipped=len(skipped),
                 ready_ids=list(ready), selection='all_matched_no_swc_screening')
     save_json(root/'input-scan.json', plan)
-    print(f'v0.83：原图 {len(raw_index)}，mask {len(mask_index)}，本轮就绪 {len(ready)}，暂跳过 {len(skipped)}；{cfg["workers"]} 路并行', flush=True)
+    print(f'{cfg["method_version"]}：原图 {len(raw_index)}，mask {len(mask_index)}，本轮就绪 {len(ready)}，暂跳过 {len(skipped)}；{cfg["workers"]} 路并行', flush=True)
     if args.check:
         return 0
     counters = dict(total=len(ready), completed=0, resumed=0, failed=0, deferred=0)
@@ -209,7 +209,7 @@ def main():
                 mask_mip=cfg.get('mask_mip',{}),
                 tools={k:cfg[k] for k in ['vaa3d_app2','vaa3d_resample','python_executable']}),sort_keys=True).encode()).hexdigest()
             spec = dict(id=cid, raw=str(inputs[0]), mask=str(inputs[1]), soma_json=str(inputs[2]), soma_mask=str(inputs[3]),
-                        old_swcs=[], selection_reason='all_matched_v083', metadata=record, config=cfg, fingerprint=fingerprint)
+                        old_swcs=[], selection_reason='all_matched_'+cfg['method_version'], metadata=record, config=cfg, fingerprint=fingerprint)
             state_path = root/'status'/f'{cid}.json'
             from utils.baseline_io import seed
             seed(spec,stamps,state_path,save_json,check_swc)
@@ -242,7 +242,7 @@ def main():
                 save_json(state_path,state)
                 raise ValueError('Inputs changed during execution; result not accepted as complete')
             with guard: counters['completed'] += 1
-            return 'v0.83 mask、SWC 和对比图完成'
+            return f'{cfg["method_version"]} mask、SWC 和对比图完成'
         except BaseException as exc:
             if child is not None and child.poll() is None:
                 os.killpg(child.pid,signal.SIGTERM)
