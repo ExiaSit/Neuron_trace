@@ -17,8 +17,10 @@ def load_config(path):
     cfg['previous_swc_dirs']=[absolute(p) for p in cfg.get('previous_swc_dirs',[])]
     for model in cfg.get('models',{}).values():
         model['results']=absolute(model['results'])
-    cfg.setdefault('method_version','v0.83')
-    cfg.setdefault('method_revision','ring-guard-20261016-short-leaves-20261023')
+    cfg.setdefault('method_version','v0.83a')
+    cfg.setdefault('method_revision','multiaxis-overlapping-mip-20261025')
+    from algorithms.mask_repair.multiscale_mip import configuration
+    cfg['mask_mip']=configuration(cfg.get('mask_mip', {}))
     cfg['direct_inputs']=True
     cfg.setdefault('baseline_root',None)
     if cfg['baseline_root'] is not None:

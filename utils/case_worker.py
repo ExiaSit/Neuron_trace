@@ -96,7 +96,9 @@ def run_worker(spec_path, mask_only=False):
         state['completed_stages']=[x for x in state['completed_stages'] if x!='comparison']
     work=r/'mask_steps'/cid;work.mkdir(parents=True,exist_ok=True)
     logs=r/'logs'/cid;logs.mkdir(parents=True,exist_ok=True)
-    env=os.environ.copy();env.update(RECONNECT_RAW=spec['raw'],RECONNECT_MASK=spec['mask'],RECONNECT_WORK=str(work),PYTHONDONTWRITEBYTECODE='1',OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='1',MKL_NUM_THREADS='1')
+    from algorithms.mask_repair.multiscale_mip import configuration
+    mip_config=configuration(spec['config'].get('mask_mip', {}))
+    env=os.environ.copy();env.update(RECONNECT_RAW=spec['raw'],RECONNECT_MASK=spec['mask'],RECONNECT_WORK=str(work),RECONNECT_MIP_CONFIG=json.dumps(mip_config),PYTHONDONTWRITEBYTECODE='1',OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='1',MKL_NUM_THREADS='1')
     def stage_run(name, command, expected):
         if name in state['completed_stages'] and all(x.is_file() and x.stat().st_size>0 for x in expected):return
         state['current_stage']=name;save_json(status_path,state)

@@ -19,6 +19,12 @@ def prepare(spec, state, stage_run):
                       [work/letter/'connected-mask.tif',work/letter/'report.json'])
             before=Path(spec['mask']) if index==0 else work/'abcdef'[index-1]/'connected-mask.tif'
             record_mask_step(spec,index,before,work/letter/'connected-mask.tif')
+            if letter in ('b','d'):
+                from collections import Counter
+                report=json.loads((work/letter/'report.json').read_text())
+                save_json(p['root']/'logs'/spec['id']/f'mask-{letter}-mip.json',dict(
+                    backmap=report.get('backmap',{}),connections=len(report.get('accepted',[])),
+                    rejected=dict(Counter(x.get('reason','unknown') for x in report.get('rejected',[])))))
         original=tifffile.imread(spec['mask'])>0
         result=tifffile.imread(work/'f/connected-mask.tif')
         mask_run.validate_result(result,original)

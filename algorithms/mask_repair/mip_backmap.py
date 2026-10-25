@@ -7,7 +7,7 @@ from utils import bootstrap as _bootstrap
 import numpy as np
 from scipy import ndimage as ndi
 
-def backmap(raw, contrast):
+def legacy_backmap(raw, contrast):
     zmax=raw.argmax(axis=0)
     mip=raw.max(axis=0)
     primary=np.zeros(raw.shape,bool)
@@ -37,3 +37,19 @@ def backmap(raw, contrast):
     classes=np.zeros(raw.shape,np.uint8);classes[recovered]=3;classes[secondary]=2;classes[primary]=1
     stats=dict(primary_peak_voxels=int(primary.sum()),secondary_peak_voxels=int(secondary.sum()),reinforced_voxels=int(np.sum(guide>contrast)),multi_depth_xy=int(np.sum(secondary.any(0)&primary.any(0))),secondary_neighbor_columns=3,neighbor_depth_tolerance=2,reinforcement_radius=1,min_measured_contrast=.75,max_contrast_boost=3.)
     return guide,classes,mip,zmax,stats
+
+
+def backmap(raw, contrast, config=None):
+    from .multiscale_mip import configuration, reinforce
+    cfg = configuration(config)
+    if raw.ndim != 3 or raw.shape != contrast.shape or any(n == 0 for n in raw.shape):
+        raise ValueError('MIP guidance requires matching nonempty 3-D volumes')
+    if not np.isfinite(contrast).all():
+        raise ValueError('Non-finite MIP contrast')
+    guide, classes, mip, zmax, stats = legacy_backmap(raw, contrast)
+    stats['mode'] = cfg['mode']
+    if cfg['mode'] == 'multiscale':
+        guide, classes, report = reinforce(raw, contrast, guide, classes, cfg)
+        stats['multiscale'] = report
+        stats['reinforced_voxels'] = int(np.count_nonzero(guide > contrast))
+    return guide, classes, mip, zmax, stats

@@ -1,0 +1,33 @@
+v0.83a 多方向、多尺度、重叠 MIP 引导
+基线：v0.83 d48644f；日期：2026-10-25，Asia/Shanghai。
+
+改动范围：mask 修复 b/d 的投影引导；保留旧引导作为下限。
+三个方向均计算全图 MIP 和 8/16/32/64 层的重叠窗口，overlap=0.5。
+局部最大值回映到实际三维深度，要求邻列支持以及至少两个投影方向一致。
+不沿 Z/X/Y 整列填充。只在种子一体素邻域、原对比度>.75 的位置进行有限增强，
+增强上限为原对比度+3。所有旧三维路径验收、原图回退和拓扑检查保留。
+G-Cut 仍继承 v0.83 的 EDT 候选，未在本次混入 v0.82 GSDT 或 GPU 改动。
+
+单元验证：全部119项测试通过（包含11项新增投影检查）。
+另新增2项比较指标检查，验证按分叉间完整路径计算平均分支长度、拒绝非法树。
+
+真实数据验证正在执行，不能据此声称质量提升：
+300例固定队列包含已可访问的历史回归/对比输入、11个已讨论的问题案例和固定随机
+种子补足的案例。缺失输入在cohort-selection.json逐项记录，未冒充完整52例旧回归。
+原始文件按SHA256复制到系统SSD；两组使用完全相同的缓存输入和元数据。
+两组均使用各自实时工作目录的代码，重新修复mask；--full重新运行APP2、G-Cut、
+重采样和剪枝，不加载历史发布保护，不用旧结果替换本次候选。
+记录三维体素差异、初始前景保留、连通分量、新增独立胞体核心接触、
+各阶段SWC节点数/总长度/分支数/平均分支长度，以及逐阶段耗时。
+平均分支长度=总分支长度/分支数；分支为根/分叉/末端之间的完整路径，非平均边长。
+胞体检查依赖辅助分割，是风险提示而非生物学所有权真值。
+
+本机结果（不进入Git）：
+/home/pzy/neuron_validation/v083a_mip_300_20261025
+复跑命令：
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+/home/pzy/anaconda3/envs/hb_seg/bin/python \
+  /data/disk/Neuron_tracing_method/v0.83a/tools/compare_mip_repair.py \
+  --cohort /home/pzy/neuron_validation/v083a_mip_300_20261025/cohort.json \
+  --output /home/pzy/neuron_validation/v083a_mip_300_20261025/comparison \
+  --baseline-code /data/disk/Neuron_tracing_method/v0.83 --workers 12 --full

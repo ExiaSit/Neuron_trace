@@ -1,5 +1,5 @@
 {
-  "method_version": "v0.83",
+  "method_version": "v0.83a",
   "direct_inputs": true,
   "metadata_file": "/data/disk/Neuron_trace/metadata/meta_260804.csv",
   "output_root": "./outputs/reconstruction",
@@ -27,7 +27,7 @@
   ],
   "app2_temp_dir": "/tmp/neuron-app2-v083",
   "baseline_root": null,
-  "method_revision": "ring-guard-20261016-short-leaves-20261023",
+  "method_revision": "multiaxis-overlapping-mip-20261025",
   "validated_baseline_registry": "./tests/baselines/validated-registry.json",
   "input_mode": "v3d",
   "neuron_ids": [],
@@ -68,5 +68,16 @@
     "/data/disk3/120_130k/trace_app2/down_sampled_swcs_app2",
     "/data/disk3/recovered_potential_neurons/reconstruction/trace_app2/down_sampled_swcs_app2"
   ],
-  "previous_app2_coordinates": "native"
+  "previous_app2_coordinates": "native",
+  "mask_mip": {
+    "mode": "multiscale",
+    "thicknesses": [
+      8,
+      16,
+      32,
+      64
+    ],
+    "overlap": 0.5,
+    "min_axes": 2
+  }
 }

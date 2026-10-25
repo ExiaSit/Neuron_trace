@@ -1,3 +1,26 @@
+Neuron reconstruction v0.83a — 三方向、多厚度、重叠 MIP 引导
+
+本分支基于 v0.83 d48644f。mask 修复的 b、d 两步新增 XY/XZ/YZ 的
+全图投影，以及 8/16/32/64 体素厚度、50% 重叠的滑动投影。
+三维种子至少获两个方向支持；保留原 XY 引导，并取有限增强后的并集。
+增强仅用于寻路，三维原图信号验收、防胞体误连、碰撞及 ring guard 保持原规则。
+没有把 MIP 柱体直接写入 mask，也没有修改 G-Cut 候选算法或后续剪枝。
+
+config.example.json / configs/from_existing_mask.json 中可配置：
+  "mask_mip": {"mode":"multiscale", "thicknesses":[8,16,32,64],
+               "overlap":0.5, "min_axes":2}
+尺寸单位为输入的体素（标准输入为 1 µm）；stride=floor(厚度×(1-overlap))，
+至少为 1。最后一个窗口对齐图像末端；超过轴长的厚度去重为全图投影。
+mode="legacy" 可对照原 XY 引导。改变设置后使用新 output_root，不能混用检查点。
+logs/<ID>/mask-b-mip.json 和 mask-d-mip.json 保留各方向、尺度、窗口及连接统计。
+
+300 例对比工具：tools/compare_mip_repair.py；支持断点继续、--full 全流程对比，
+保存逐例 mask 增删、三视图、阶段节点数/长度/平均分支长度，以及新增独立胞体
+核心接触检查。没有人工真值，长度增加不代表质量提高。结果与本机配置不进入 Git。
+本次验证状态见 docs/V083A_MIP_VALIDATION.txt。
+
+以下为继承的 v0.83 使用说明和历史验证，不能视作 v0.83a 的质量验收。
+------------------------------------------------------------------------
 Neuron reconstruction v0.83 — 完整流程整理版
 整理日期：2026-10-20，Asia/Shanghai
 

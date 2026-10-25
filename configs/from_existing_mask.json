@@ -1,5 +1,5 @@
 {
-  "method_version": "v0.83",
+  "method_version": "v0.83a",
   "direct_inputs": true,
   "raw_dir": "/media/pzy/U-Disk2/human_reconstruction/1um_img/img",
   "mask_dir": "/media/pzy/U-Disk2/human_reconstruction/mask",
@@ -34,7 +34,7 @@
     "/media/pzy/U-Disk2/human_reconstruction/1um_img/img": "/media/pzy/U-Disk2/human_reconstruction/1um_img"
   },
   "baseline_root": null,
-  "method_revision": "ring-guard-20261016-short-leaves-20261023",
+  "method_revision": "multiaxis-overlapping-mip-20261025",
   "validated_baseline_registry": "../tests/baselines/validated-registry.json",
   "input_mode": "prepared",
   "previous_app2_dirs": [
@@ -43,5 +43,16 @@
     "/data/disk3/120_130k/trace_app2/down_sampled_swcs_app2",
     "/data/disk3/recovered_potential_neurons/reconstruction/trace_app2/down_sampled_swcs_app2"
   ],
-  "previous_app2_coordinates": "native"
+  "previous_app2_coordinates": "native",
+  "mask_mip": {
+    "mode": "multiscale",
+    "thicknesses": [
+      8,
+      16,
+      32,
+      64
+    ],
+    "overlap": 0.5,
+    "min_axes": 2
+  }
 }

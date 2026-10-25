@@ -84,8 +84,8 @@ def main():
     ap.add_argument('--check', action='store_true')
     args = ap.parse_args()
     cfg = json.loads(Path(args.config).read_text())
-    if cfg.get('method_version') != 'v0.83' or not cfg.get('direct_inputs'):
-        raise ValueError('This runner requires v0.83 and direct_inputs=true')
+    if cfg.get('method_version') not in ('v0.83','v0.83a') or not cfg.get('direct_inputs'):
+        raise ValueError('This runner requires v0.83/v0.83a and direct_inputs=true')
     batch.validate_parallel_config(cfg)
     root = Path(cfg['output_root']).resolve()
     sources = [Path(cfg[k]).resolve() for k in ['raw_dir','mask_dir','soma_crop_dir','soma_seg_dir']]
@@ -206,6 +206,7 @@ def main():
                 for k,res,val in zip(['soma_x','soma_y','soma_z'],['xy_resolution','xy_resolution','z_resolution'],override):
                     record[k] = float(val)*1000/float(record[res])
             fingerprint = hashlib.sha256(json.dumps(dict(inputs=stamps, metadata=record, code=code_hash,
+                mask_mip=cfg.get('mask_mip',{}),
                 tools={k:cfg[k] for k in ['vaa3d_app2','vaa3d_resample','python_executable']}),sort_keys=True).encode()).hexdigest()
             spec = dict(id=cid, raw=str(inputs[0]), mask=str(inputs[1]), soma_json=str(inputs[2]), soma_mask=str(inputs[3]),
                         old_swcs=[], selection_reason='all_matched_v083', metadata=record, config=cfg, fingerprint=fingerprint)

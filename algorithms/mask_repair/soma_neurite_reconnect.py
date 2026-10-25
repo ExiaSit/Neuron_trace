@@ -109,6 +109,7 @@ def main():
  soma_roots=[int(lab2[tuple(surfaces[cid][0])]) for cid in soma_components];assert len(set(soma_roots))==len(soma_roots)
  for name,a in [('connected-mask',connected),('new-soma-bridges-only',added)]:tifffile.imwrite(O/(name+'.tif'),a.astype('uint8')*255,compression='zlib')
  report=dict(base=str(BASE/'connected-mask.tif'),components_before=n,components_after=n2,new_connections=len(accepted),new_voxels=int(added.sum()),accepted=accepted,somas=[{k:v for k,v in r.items() if k not in ['surface','tree']} for r in records],fragment_audit=audit,competition=competition,rejected=rejected,limits='Same-component internal gaps are skipped. Source direction 60 degrees; 50-voxel endpoint search (compact soma surface); 18-voxel small-fragment search. Voxel units, minimal bridge thickness; not biological validation.')
+ report['backmap']=mapstats
  (O/'report.json').write_text(json.dumps(report,indent=2));print(json.dumps({k:report[k] for k in ['components_before','components_after','new_connections','new_voxels']}),flush=True)
  for e in accepted:print(e['source'],'-> soma',e['soma_id'],'gap',round(e['gap'],1),'cost',round(e['cost'],3),flush=True)
 
