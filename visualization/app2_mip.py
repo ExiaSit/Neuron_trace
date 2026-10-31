@@ -77,6 +77,9 @@ def generate_xy_mip_visualization(raw_img_path, mask_path, swc_path, output_png_
         overlay[..., 3] = mask_xy.astype(float) * 0.35
         axes[1].imshow(overlay)
 
+        from visualization.swc_view import crop_xy_axes
+        for ax in axes:
+            crop_xy_axes(ax, raw_xy.shape, nodes.values())
         fig.tight_layout()
         fig.savefig(output_png_path, bbox_inches="tight")
         plt.close(fig)

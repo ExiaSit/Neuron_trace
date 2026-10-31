@@ -1,6 +1,7 @@
 """Read-only views of explicitly registered paired reconstruction reports."""
 import json
 from pathlib import Path
+from web_console.artifact_metadata import with_storage_paths
 
 
 def comparison_paths(cid):
@@ -39,7 +40,7 @@ def comparison_artifacts(record, cid):
                                scope='comparison', cell=cid, size=p.stat().st_size,
                                mtime=p.stat().st_mtime_ns,
                                description=('三行依次为 XY/XZ/YZ；四列为原 mask、v0.83、v0.83a、两版差异。红色为新版多出的体素，黄色为仅旧版存在的体素。' if relative.startswith('comparisons/') else '已完成的配对实验统计。')))
-    return result
+    return with_storage_paths(root,result)
 
 
 def comparison_summary(record, cid):

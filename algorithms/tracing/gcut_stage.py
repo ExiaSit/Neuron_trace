@@ -449,7 +449,8 @@ def process_image_to_gcut(img_path, mask_path, swc_path, vis_output_dir,
                     from algorithms.tracing.gcut_adapter import make_segmentor
                     segmentor = make_segmentor(str(temp_swc_path), str(temp_soma_txt))
                     short_leaf_audit = segmentor.short_leaf_audit
-                    (Path(vis_output_dir)/'short-leaf-audit.json').write_text(json.dumps(short_leaf_audit,indent=2))
+                    if short_leaf_audit is not None:
+                        (Path(vis_output_dir)/'short-leaf-audit.json').write_text(json.dumps(short_leaf_audit,indent=2))
                     segmentor.segment(conditional='human', cell_type='neocortex')
                     gcut_neurons = segmentor.knife.assemble() 
                     

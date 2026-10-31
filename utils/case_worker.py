@@ -45,6 +45,7 @@ def paths(spec):
     root = Path(spec['config']['output_root']); cid = spec['id']
     direct=spec['config'].get('direct_inputs',False)
     return dict(root=root, raw=Path(spec['raw']) if direct else root/'img'/f'{cid}_0000.tif', mask=root/'mask'/f'{cid}.tif',
+                original_mask=root/'mask_original'/f'{cid}.tif',
                 soma_json=Path(spec['soma_json']) if direct else root/'soma_img'/f'{cid}.json',
                 soma_mask=Path(spec['soma_mask']) if direct else root/'soma_seg'/f'{cid}.tif',
                 app2=root/'trace_app2/down_sampled_swcs_app2'/f'{cid}.swc',
@@ -99,12 +100,22 @@ def run_worker(spec_path, mask_only=False):
     from algorithms.mask_repair.multiscale_mip import configuration
     mip_config=configuration(spec['config'].get('mask_mip', {}))
     env=os.environ.copy();env.update(RECONNECT_RAW=spec['raw'],RECONNECT_MASK=spec['mask'],RECONNECT_WORK=str(work),RECONNECT_MIP_CONFIG=json.dumps(mip_config),PYTHONDONTWRITEBYTECODE='1',OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='1',MKL_NUM_THREADS='1')
+    from algorithms.mask_repair.local_pair_mip import configuration as pair_configuration
+    env['RECONNECT_LOCAL_PAIR_MIP_CONFIG']=json.dumps(pair_configuration(spec['config'].get('local_pair_mip',{})))
+    backend=spec['config'].get('mask_compute_backend','cuda')
+    minimum=spec['config'].get('mask_gpu_min_voxels',262144)
+    if backend not in ('cpu','cuda'):raise ValueError('mask_compute_backend must be cpu or cuda')
+    if type(minimum) is not int or minimum<1:raise ValueError('mask_gpu_min_voxels must be a positive integer')
+    env.update(RECONNECT_COMPUTE_BACKEND=backend,RECONNECT_GPU_MIN_VOXELS=str(minimum))
     def stage_run(name, command, expected):
         if name in state['completed_stages'] and all(x.is_file() and x.stat().st_size>0 for x in expected):return
         state['current_stage']=name;save_json(status_path,state)
         print(f'[{cid}] {name} 开始',flush=True);start=time.monotonic()
+        stage_env=env.copy()
+        stage_env['RECONNECT_COMPUTE_BACKEND']=backend if name.startswith('mask_') or name=='continuity' else 'cpu'
+        stage_env['RECONNECT_GPU_STATS']=str(logs/f'{name}-gpu.json')
         with (logs/f'{name}.log').open('w') as stream:
-            child=subprocess.run(command,env=env,stdout=stream,stderr=subprocess.STDOUT,cwd=work)
+            child=subprocess.run(command,env=stage_env,stdout=stream,stderr=subprocess.STDOUT,cwd=work)
         if child.returncode:raise RuntimeError(f'{name} failed: {(logs/f"{name}.log").read_text()[-2500:]}')
         if not all(x.is_file() and x.stat().st_size>0 for x in expected):raise RuntimeError(f'{name} missing output')
         if name not in state['completed_stages']:state['completed_stages'].append(name)

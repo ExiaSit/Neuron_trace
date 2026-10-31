@@ -15,6 +15,6 @@ def cleanup(root, cid):
     for parent in [root/'trace_app2/native_swcs',root/'gcut_output/selected_for_pruning']:
         files+=list(parent.glob(f'{cid}_retry_*.swc'))
     for pattern in [f'{cid}_*.png',f'{cid}_*.json']:
-        files+=[p for p in (root/'pruning_mips').glob(pattern) if p.name != f'{cid}_combined_process.png']
+        files+=[p for p in (root/'pruning_mips').glob(pattern) if p.name not in {f'{cid}_combined_process.png', f'{cid}_pruning_reasons.json'}]
     for path in files:
         if path.is_file() or path.is_symlink():path.unlink()

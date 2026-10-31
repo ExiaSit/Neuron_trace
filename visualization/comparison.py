@@ -71,6 +71,17 @@ def comparison(spec, failure=None):
         ax.scatter([soma_x], [soma_y], s=12, c='red', marker='o', edgecolors='none', zorder=20)
         ax.set_xlim(-.5, bg.shape[1]-.5)
         ax.set_ylim(bg.shape[0]-.5, -.5)
+    from visualization.swc_view import crop_xy_axes
+    previous_xy = [n.xy for file in spec.get('old_swcs', []) if Path(file).is_file()
+                   for n in check_swc(Path(file)).values()]
+    app2_xy = [xyz[:2] for xyz, parent in old_app2.values()]
+    if p['app2'].is_file():
+        app2_xy += [n.xy for n in check_swc(p['app2']).values()]
+    crop_xy_axes(axes[0, 3], bg.shape, previous_xy)
+    for ax in [axes[1, 0], axes[1, 1], axes[1, 2]]:
+        crop_xy_axes(ax, bg.shape, app2_xy)
+    final_xy = [n.xy for n in check_swc(p['final']).values()] if p['final'].is_file() else []
+    crop_xy_axes(axes[1, 3], bg.shape, final_xy)
     fig.suptitle(f"{spec['id']} | {spec['selection_reason']} | red dot: target soma | " +
                  (f'INCOMPLETE: {failure}' if failure else 'SWCs in image coordinates'))
     source_text = ('Previous APP2: '+source['path']+' | '+source['transform'] if old_app2

@@ -1,6 +1,7 @@
 """Bounded soma contraction and terminal pruning by 3-D path length.
 
-Run after soma contraction and before G-Cut separation / 1-um resampling.
+Current pipeline runs terminal pruning last, after all downstream pruning.
+G-Cut retains an explicit legacy replay option for historical diagnostics.
 Coordinates are 1-um image XYZ. Include the attachment edge to the surviving
 branch point or soma in each terminal path's length; protect known somas.
 """
@@ -61,7 +62,7 @@ def prune_short_leaves_by_length(tree, stable_nodes, min_length_um=SHORT_LEAF_MI
             return removed_branches
 
 
-def make_segmentor(swc_path,soma_file_path,min_leaf_length_um=SHORT_LEAF_MIN_LENGTH_UM):
+def make_segmentor(swc_path,soma_file_path,min_leaf_length_um=None):
     from neuron_segmentation import NeuronSegmentation
     from gcut.preprocess import HandyMan
     from gcut.gcut import GCut
@@ -97,27 +98,31 @@ def make_segmentor(swc_path,soma_file_path,min_leaf_length_um=SHORT_LEAF_MIN_LEN
     segmentor.handy_man=BoundedSomaPreprocessor(swc_path,soma_file_path,scale_z=1.0)
     segmentor.handy_man.extract_soma_ids({},size_threshold=None)
     segmentor.handy_man.soma_sinks()
-    def snapshot():
-        return [[n.node_id,n.node_type,n.x,n.y,n.z,n.radius,n.parent_id]
-                for n in segmentor.handy_man.tree_nodes.tree.values()]
-    before_nodes=snapshot()
-    before_pruning=len(before_nodes)
-    removed_branches=prune_short_leaves_by_length(
-        segmentor.handy_man.tree_nodes,segmentor.handy_man.soma_ids,min_leaf_length_um)
-    after_nodes=snapshot()
-    segmentor.short_leaf_audit=dict(before_nodes=before_nodes,after_nodes=after_nodes,
-        removed_ids=sorted({n[0] for n in before_nodes}-{n[0] for n in after_nodes}),
-        soma_ids=sorted(segmentor.handy_man.soma_ids),min_leaf_branch_length_um=min_leaf_length_um,
-        removed_branches=removed_branches,
-        removed_length_um=sum(branch['length_um'] for branch in removed_branches),
-        length_metric='3-D path length including attachment edge; 1-um image XYZ',
-        comparison='strictly_less_than',leaf_order='ascending_node_id',
-        rule=f'iterative terminal path length <{min_leaf_length_um:g} um; attachment node and somas protected',
-        capture_point='after soma contraction, before G-Cut segmentation')
+    segmentor.short_leaf_audit = None
+    # Explicit threshold is only for replaying historical preprocessing.
+    if min_leaf_length_um is not None:
+        def snapshot():
+            return [[n.node_id,n.node_type,n.x,n.y,n.z,n.radius,n.parent_id]
+                    for n in segmentor.handy_man.tree_nodes.tree.values()]
+        before_nodes=snapshot()
+        removed_branches=prune_short_leaves_by_length(
+            segmentor.handy_man.tree_nodes,segmentor.handy_man.soma_ids,min_leaf_length_um)
+        after_nodes=snapshot()
+        segmentor.short_leaf_audit=dict(before_nodes=before_nodes,after_nodes=after_nodes,
+            removed_ids=sorted({n[0] for n in before_nodes}-{n[0] for n in after_nodes}),
+            soma_ids=sorted(segmentor.handy_man.soma_ids),min_leaf_branch_length_um=min_leaf_length_um,
+            removed_branches=removed_branches,
+            removed_length_um=sum(branch['length_um'] for branch in removed_branches),
+            length_metric='3-D path length including attachment edge; 1-um image XYZ',
+            comparison='strictly_less_than',leaf_order='ascending_node_id',
+            rule=f'iterative terminal path length <{min_leaf_length_um:g} um; attachment node and somas protected',
+            capture_point='after soma contraction, before G-Cut segmentation')
     segmentor.tree_nodes,segmentor.soma_ids=segmentor.handy_man.results()
     segmentor.knife=GCut()
-    print(f'G-Cut: short-leaf pruning (<{min_leaf_length_um:g} um, soma protected): '
-          f'{before_pruning} -> {len(segmentor.tree_nodes.tree)} nodes',flush=True)
+    if min_leaf_length_um is None:
+        print('G-Cut: terminal length pruning deferred to the final pruning stage', flush=True)
+    else:
+        print(f'Historical replay: short terminals <{min_leaf_length_um:g} um removed before G-Cut', flush=True)
     return segmentor
 
 

@@ -12,7 +12,7 @@ from pathlib import Path
 import sys,json
 import numpy as np
 import tifffile
-from scipy import ndimage as ndi
+from utils.gpu_ndimage import ndi
 from scipy.spatial import cKDTree
 from skimage.morphology import skeletonize
 
@@ -59,7 +59,8 @@ def target_body(raw, xyz, json_path=None, soma_path=None):
     # Only a short measured shell; long neurites use the directional trace below.
     allowed=ndi.binary_dilation(body,S,iterations=3)&core&~ndi.binary_dilation(other,S)
     body=ndi.binary_propagation(body&~other,S,mask=body|allowed)
-    return sl,body,other,dict(status='supported_soma',seed_raw=int(raw[tuple(p)]),voxels=int(body.sum()))
+    top=int(np.argwhere(body)[:,0].min()+lo[0]) if body.any() else None
+    return sl,body,other,dict(status='supported_soma',seed_raw=int(raw[tuple(p)]),voxels=int(body.sum()),completed_soma_top_z=top)
 
 
 def directions():
@@ -82,14 +83,14 @@ def connect_roots(raw, mask, body, other_bodies=None):
     for cid,box in enumerate(ndi.find_objects(labels),1):
         if box is None or cid in protected:continue
         lo=np.array([v.start for v in box]);hi=np.array([v.stop for v in box])
-        if np.linalg.norm(np.maximum(0,np.maximum(blo-hi,lo-bhi)))>55:continue
+        if np.linalg.norm(np.maximum(0,np.maximum(blo-hi,lo-bhi)))>70:continue
         local=labels[box]==cid
         tips,_=robust.tips_for(local,lo)
         seen=set()
         for point,direction in tips:
             if tuple(point) in seen:continue
             distance,j=kt.query(point)
-            if not 2<=distance<=55:continue
+            if not 2<=distance<=70:continue
             q=surface[j];cosine=direction@((q-point)/distance)
             if cosine<.6:continue
             seen.add(tuple(point))
@@ -110,12 +111,16 @@ def connect_roots(raw, mask, body, other_bodies=None):
         added[tuple(pts.T)]=True;used.add(e['source']);accepted.append({k:v for k,v in e.items() if k not in ['path_zyx','layers']})
     return mask|added,dict(accepted=accepted,rejections=audit,added_voxels=int(np.count_nonzero(added&~mask)))
 
-def extend(raw, mask, xyz=None, json_path=None, soma_path=None):
+def extend(raw, mask, xyz=None, json_path=None, soma_path=None, completed_somas=None):
     from .continuation_evidence import ContinuationEvidence
     evidence=ContinuationEvidence(raw);final=mask.copy();report=dict(soma={},traces=[],rejected={});target=None
     body=np.zeros_like(mask);neighbors=np.zeros_like(mask)
     if xyz is not None:
         sl,b,other,rec=target_body(raw,xyz,json_path,soma_path);report['soma']=rec;body[sl]=b;neighbors[sl]=other;final|=body
+        if b.any() and completed_somas is not None:
+            points=np.argwhere(b)+np.array([s.start for s in sl])
+            completed_somas.append(dict(center_xyz=list(xyz),points_zyx=points,
+                                        top_z=int(points[:,0].min()),source='g_target'))
         if not b.any():return final,dict(report,added_voxels=int(np.count_nonzero(final&~mask)))
     if body.any():
         # Keep full auxiliary-crop neighbor context, including somas outside the

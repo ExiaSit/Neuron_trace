@@ -207,6 +207,7 @@ def main():
                     record[k] = float(val)*1000/float(record[res])
             fingerprint = hashlib.sha256(json.dumps(dict(inputs=stamps, metadata=record, code=code_hash,
                 mask_mip=cfg.get('mask_mip',{}),
+                mask_growth_direction=cfg.get('mask_growth_direction','per_soma_top'),
                 tools={k:cfg[k] for k in ['vaa3d_app2','vaa3d_resample','python_executable']}),sort_keys=True).encode()).hexdigest()
             spec = dict(id=cid, raw=str(inputs[0]), mask=str(inputs[1]), soma_json=str(inputs[2]), soma_mask=str(inputs[3]),
                         old_swcs=[], selection_reason='all_matched_'+cfg['method_version'], metadata=record, config=cfg, fingerprint=fingerprint)
@@ -221,6 +222,8 @@ def main():
                 expected = [p[k] for k in ['mask','app2','selected','resampled','final','mip','comparison']]
                 expected += [root/'gcut_mips'/f'{cid}.png',root/'pruning_mips'/f'{cid}_combined_process.png']
                 if state.get('status') == 'complete' and all(x.is_file() and x.stat().st_size for x in expected):
+                    from utils.mask_storage import preserve_original_mask
+                    preserve_original_mask(spec)
                     check_swc(p['final'])
                     with guard: counters['resumed'] += 1
                     return '完整结果已存在，跳过'

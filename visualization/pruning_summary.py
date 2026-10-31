@@ -34,6 +34,8 @@ def save_pruning_summary(show_steps, viz_buffer, raw_image, morph, sphere_zradiu
         ("step09_final_result", "Step 9: Final Result"),
     ]
 
+    from visualization.swc_view import crop_xy_axes
+    view_points = [n[2:5] for data in viz_buffer.values() for n in (data.get('tree') or [])]
     type_colors = {1: 'white', 2: 'magenta', 3: 'cyan', 4: 'purple', 0: 'dodgerblue'}
     for i, (key, title) in enumerate(step_order):
         ax = axes[i]
@@ -221,6 +223,9 @@ def save_pruning_summary(show_steps, viz_buffer, raw_image, morph, sphere_zradiu
         ),
         zorder=10,
     )
+
+    for ax in [*axes, comparison_input_ax, comparison_output_ax]:
+        crop_xy_axes(ax, raw_image.shape[-2:], view_points)
 
     fig.suptitle(
         f"{prefix} 剪枝流程与原因对照", fontsize=19, fontweight="bold", y=0.995

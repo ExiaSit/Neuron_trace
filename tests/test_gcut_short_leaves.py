@@ -19,7 +19,7 @@ class GCutShortLeavesTests(unittest.TestCase):
                 f'{nid} {1 if nid in somas else 3} {x} {y} {z} 0.01 {parent}\n'
                 for nid, x, y, z, parent in nodes))
             soma.write_text(''.join(f'{nid}\n' for nid in somas))
-            segmentor = make_segmentor(str(swc), str(soma))
+            segmentor = make_segmentor(str(swc), str(soma), min_leaf_length_um=7.75)
             for node in segmentor.tree_nodes.tree.values():
                 self.assertTrue(node.parent_id == -1 or
                                 node.parent_id in segmentor.tree_nodes.tree)

@@ -74,13 +74,18 @@ def backfill(spec, replay=False):
     else:
         mask_transition(raw,before,tifffile.imread(p['mask']),root/'mask_step_mips'/f'{cid}_07_combined.png',
                         f'{cid} | Final repair changes since step f',provenance='combined; intermediate unavailable')
-    setup_config(spec);load_module('gcut')
-    from algorithms.tracing.gcut_adapter import make_segmentor
-    vis=root/'gcut_output'/cid
-    injected=vis/f'{p["raw"].stem}_temp_injected.swc';somas=vis/f'{p["raw"].stem}_soma_ids.txt'
-    segmentor=make_segmentor(str(injected),str(somas))
-    audit=dict(segmentor.short_leaf_audit,inputs={str(x):sha(x) for x in [injected,somas]})
-    write_short_leaf_audit(audit,raw,root,cid,'replayed from retained G-Cut input; preprocessing only')
+    pruning_path = root/'logs'/cid/'pruning-audit.json'
+    final_short = (json.loads(pruning_path.read_text()).get('final_short_leaf_audit')
+                   if pruning_path.is_file() else None)
+    audit = {'removed_ids': []}
+    if final_short is None:
+        setup_config(spec);load_module('gcut')
+        from algorithms.tracing.gcut_adapter import make_segmentor
+        vis=root/'gcut_output'/cid
+        injected=vis/f'{p["raw"].stem}_temp_injected.swc';somas=vis/f'{p["raw"].stem}_soma_ids.txt'
+        segmentor=make_segmentor(str(injected),str(somas),min_leaf_length_um=7.75)
+        audit=dict(segmentor.short_leaf_audit,inputs={str(x):sha(x) for x in [injected,somas]})
+        write_short_leaf_audit(audit,raw,root,cid,'replayed from retained G-Cut input; preprocessing only')
     with tempfile.TemporaryDirectory(dir=root) as tmp:
         spec=dict(spec,config=dict(spec['config'],comparison_dir=tmp))
         comparison(spec)

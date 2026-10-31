@@ -28,6 +28,8 @@ from scipy.spatial import cKDTree
 from skimage.graph import route_through_array, MCP_Geometric
 from collections import deque
 from algorithms.tracing.signal_support import SignalEvidence, prune_unsupported, prune_crossing_switches
+from algorithms.tracing.sheet_signal import prune_sheet_supported
+from algorithms.tracing.terminal_pruning import prune_final_short_leaves
 
 from pipeline_config import BASE_DIR, PATHS
 from swc_handler import parse_swc, write_swc, flip_swc, shift_swc
@@ -2072,6 +2074,25 @@ def process_neuron_morphology(input_imgfile, swc_neu, raw_imgfile, out_swc_dir, 
     _record_removed_ids(weak_removed, "连续三维路径缺少横截面信号支持", "sustained_3d_signal_gap")
     tree_final, crossing_removed, crossing_reports = prune_crossing_switches(tree_final, signal_evidence, sxyz, protected_mask=confirmed_mask)
     _record_removed_ids(crossing_removed, "急转接入两侧连续的另一条三维分支", "switch_to_transverse_shaft")
+    tree_final, sheet_removed, sheet_reports = prune_sheet_supported(tree_final, signal_evidence, sxyz, protected_mask=globals().get('SHEET_PROTECTED_SOMA_MASK', confirmed_mask))
+    _record_removed_ids(sheet_removed, "连续三维路径沿宽片状亮信号延伸，缺少横向局限", "sustained_sheet_like_signal")
+    # Check repaired-region terminals and witnessed foreign-soma connectors.
+    from algorithms.tracing.repair_evidence import prune_with_context
+    tree_final, repair_removed, repair_audit = prune_with_context(
+        tree_final, signal_evidence, globals().get('REPAIR_EVIDENCE_CONTEXT'))
+    _record_removed_ids(repair_removed,
+        "相邻胞体附近的补全路径缺少持续双侧管状信号支持", "repair_without_bilateral_tube")
+    # Retired for skeleton + segmented soma: do not delete soma-adjacent
+    # terminals based on soma-relative length, tube support or duplication.
+    soma_terminal_audit = dict(rule='soma_adjacent_dead_end',
+                               status='disabled', removed_ids=[], decisions=[])
+    # Last topology-changing operation: evaluate terminal paths on the final tree.
+    tree_final, short_leaf_audit = prune_final_short_leaves(tree_final)
+    print(f"Final short-terminal pruning (<7.75 um): "
+          f"{len(short_leaf_audit['before_nodes'])} -> {len(tree_final)} nodes; "
+          f"removed {short_leaf_audit['removed_length_um']:.3f} um", flush=True)
+    _record_removed_ids(short_leaf_audit["removed_ids"],
+                        "最终末梢三维路径长度小于 7.75 µm", "final_short_terminal")
     _complete_pruning_reason_coverage(tree_final)
     # ==========================================================
 
@@ -2090,6 +2111,10 @@ def process_neuron_morphology(input_imgfile, swc_neu, raw_imgfile, out_swc_dir, 
             "output_swc": out_swc,
             "signal_gap_decisions": weak_reports,
             "crossing_decisions": crossing_reports,
+            "sheet_signal_decisions": sheet_reports,
+            "repair_evidence_audit": repair_audit,
+            "soma_terminal_audit": soma_terminal_audit,
+            "final_short_leaf_audit": short_leaf_audit,
             "removed_nodes": {
                 str(node_id): info
                 for node_id, info in sorted(pruning_reasons.items())

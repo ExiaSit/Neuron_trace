@@ -7,9 +7,9 @@ The returned guide is used for routing, not as the image or as a binary mask.
 import json
 import os
 import numpy as np
-from scipy import ndimage as ndi
+from utils.gpu_ndimage import ndi
 
-DEFAULT_CONFIG = dict(mode='multiscale', thicknesses=[8, 16, 32, 64],
+DEFAULT_CONFIG = dict(mode='multiscale', thicknesses=[8, 16, 32],
                       overlap=.5, min_axes=2)
 
 

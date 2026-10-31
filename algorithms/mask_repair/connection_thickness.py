@@ -1,4 +1,4 @@
-"""Restore signal-supported volume around accepted paths without new component mergers."""
+"""Restore signal-supported volume around accepted paths with a final same-soma merger exception."""
 import sys as _sys
 from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
@@ -8,10 +8,11 @@ import os,json
 from pathlib import Path
 import numpy as np
 import tifffile
-from scipy import ndimage as ndi
+from utils.gpu_ndimage import ndi
+from algorithms.mask_repair.thickness_evidence import soma_domains, guard_mergers
 
-def restore(raw,mask,paths):
- labels,n=ndi.label(mask,np.ones((3,3,3)));added=np.zeros_like(mask);audit=[]
+def restore(raw,mask,paths,soma_domain=None,diagnostics=None):
+ labels,n=ndi.label(mask,np.ones((3,3,3)));added=np.zeros_like(mask);audit=[];growth_records=[]
  for path in paths:
   path=np.asarray(path,int)
   lo=np.maximum(0,path.min(0)-9);hi=np.minimum(raw.shape,path.max(0)+10)
@@ -34,22 +35,21 @@ def restore(raw,mask,paths):
   allowed&=~ndi.binary_dilation(other,structure=np.ones((3,3,3)),iterations=2)
   grown=ndi.binary_propagation(line&allowed,structure=np.ones((3,3,3)),mask=allowed)
   fresh=grown&~mask[sl]&~added[sl];added[sl]|=fresh
+  growth_records.append((np.argwhere(fresh)+lo,int(cid)))
   audit.append(dict(status='grown',added_voxels=int(fresh.sum()),path_start_zyx=path[0].tolist(),path_end_zyx=path[-1].tolist(),median_profile_threshold=float(np.median(threshold))))
- # Explicit global guard against collisions between independently expanded paths.
- result=mask|added;out,nout=ndi.label(result,np.ones((3,3,3)))
- if nout!=n:
-  # Reject all additions in merged output groups, preserving the validated baseline.
-  groups={}
-  for i,box in enumerate(ndi.find_objects(labels),1):
-   point=np.argwhere(labels[box]==i)[0];root=int(out[box][tuple(point)]);groups.setdefault(root,[]).append(i)
-  bad=[k for k,v in groups.items() if len(v)>1];added[np.isin(out,bad)]=False
- result=mask|added;assert ndi.label(result,np.ones((3,3,3)))[1]==n
+ # Preserve the original growth rule; only the final merger decision has an exception.
+ proposed=int(added.sum())
+ added,guard=guard_mergers(mask,added,labels,growth_records,soma_domain)
+ if diagnostics is not None:diagnostics.update(guard,proposed_voxels=proposed)
+ result=mask|added;assert np.all(result[mask])
  return result,added,audit
 
 def main():
  work=Path(os.environ['RECONNECT_WORK']);raw=tifffile.imread(os.environ['RECONNECT_RAW']);mask=tifffile.imread(work/'d/connected-mask.tif')>0
  paths=[e['path_zyx'] for s in ['b','d'] for e in json.loads((work/s/'report.json').read_text())['accepted']]
- final,added,audit=restore(raw,mask,paths);out=work/'e';out.mkdir(exist_ok=True)
+ soma_file=work/'c/soma-only.tif';soma_report=work/'c/report.json'
+ domains=soma_domains(raw,tifffile.imread(soma_file)>0,json.loads(soma_report.read_text())['somas']) if soma_file.is_file() and soma_report.is_file() else None
+ details={};final,added,audit=restore(raw,mask,paths,soma_domain=domains,diagnostics=details);out=work/'e';out.mkdir(exist_ok=True)
  for name,v in [('connected-mask',final),('thickness-added-only',added)]:tifffile.imwrite(out/(name+'.tif'),v.astype('uint8')*255,compression='zlib')
- (out/'report.json').write_text(json.dumps(dict(added_voxels=int(added.sum()),paths=audit,component_count_preserved=True,max_distance_voxels=6,profile_fraction=.45),indent=2))
+ (out/'report.json').write_text(json.dumps(dict(added_voxels=int(added.sum()),paths=audit,component_count_preserved=details['components_before']==details['components_after'],max_distance_voxels=6,profile_fraction=.45,**details),indent=2))
 if __name__=='__main__':main()

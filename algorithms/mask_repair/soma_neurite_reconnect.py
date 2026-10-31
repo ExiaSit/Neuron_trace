@@ -12,7 +12,7 @@ WORK=Path(os.environ.get('RECONNECT_WORK','.'))
 
 import sys,json
 import numpy as np
-from scipy import ndimage as ndi
+from utils.gpu_ndimage import ndi
 from scipy.spatial import cKDTree
 import tifffile
 from skimage.measure import marching_cubes
@@ -59,7 +59,7 @@ def main():
    options=[]
    for p,u in tips:
     gap,j=rec['tree'].query(p)
-    if not 1<=gap<=50:continue
+    if not 1<=gap<=70:continue
     q=rec['surface'][j];angle=float(np.degrees(np.arccos(np.clip(u@((q-p)/gap),-1,1))))
     if angle<=60:options.append((p,q,angle))
    if not tips and sizes[a]<=32:
@@ -103,12 +103,18 @@ def main():
   if set(np.unique(labels[sl][halo]))-{0}!={a,b} or np.any(added[sl]&halo):rejected.append(dict(component=a,soma_id=e['soma_id'],reason='third_fragment_or_bridge_collision'));continue
   assert ndi.label(bridge)[1]==1
   fresh=~mask[tuple(coords.T)];added[tuple(coords[fresh].T)]=True;parent[ra]=rb;root_somas[rb]|=root_somas[ra];e['added_voxels']=int(fresh.sum());accepted.append(e)
+ # Supplement only after established bridges are fixed. A hidden cap can join
+ # its soma's already assigned branch, while independent fragments stay blocked.
+ from algorithms.mask_repair.hidden_soma_caps import recover_caps
+ cap_added,cap_accepted,cap_report=recover_caps(raw,c,mask|added,labels,records,all_tips)
+ added|=cap_added;accepted.extend(cap_accepted);rejected.extend(cap_report['rejected'])
  connected=mask|added;lab2,n2=ndi.label(connected,np.ones((3,3,3)));assert n2==n-len(accepted);face=ndi.label(connected)[0]
  for e in accepted:
   p=np.asarray(e['path_zyx']);assert len(np.unique(face[tuple(p.T)]))==1
  soma_roots=[int(lab2[tuple(surfaces[cid][0])]) for cid in soma_components];assert len(set(soma_roots))==len(soma_roots)
  for name,a in [('connected-mask',connected),('new-soma-bridges-only',added)]:tifffile.imwrite(O/(name+'.tif'),a.astype('uint8')*255,compression='zlib')
- report=dict(base=str(BASE/'connected-mask.tif'),components_before=n,components_after=n2,new_connections=len(accepted),new_voxels=int(added.sum()),accepted=accepted,somas=[{k:v for k,v in r.items() if k not in ['surface','tree']} for r in records],fragment_audit=audit,competition=competition,rejected=rejected,limits='Same-component internal gaps are skipped. Source direction 60 degrees; 50-voxel endpoint search (compact soma surface); 18-voxel small-fragment search. Voxel units, minimal bridge thickness; not biological validation.')
+ report=dict(base=str(BASE/'connected-mask.tif'),components_before=n,components_after=n2,new_connections=len(accepted),new_voxels=int(added.sum()),accepted=accepted,somas=[{k:v for k,v in r.items() if k not in ['surface','tree']} for r in records],fragment_audit=audit,competition=competition,rejected=rejected,limits='Same-component internal gaps are skipped. Source direction 60 degrees; 70-voxel endpoint search (compact soma surface); 18-voxel small-fragment search. Voxel units, minimal bridge thickness; not biological validation.')
+ report['hidden_caps']=cap_report
  report['backmap']=mapstats
  (O/'report.json').write_text(json.dumps(report,indent=2));print(json.dumps({k:report[k] for k in ['components_before','components_after','new_connections','new_voxels']}),flush=True)
  for e in accepted:print(e['source'],'-> soma',e['soma_id'],'gap',round(e['gap'],1),'cost',round(e['cost'],3),flush=True)

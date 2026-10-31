@@ -82,10 +82,12 @@ def short_leaf_figure(raw, audit, path, provenance='recorded'):
     from matplotlib.collections import LineCollection
     nodes = {n[0]: n for n in audit['before_nodes']}
     removed = set(audit['removed_ids'])
+    from visualization.swc_view import SwcMipView
+    view = SwcMipView(raw.shape, [n[2:5] for n in nodes.values()])
     fig, axes = plt.subplots(1, 3, figsize=(18, 7))
     for ax, axis, plane, coords in zip(axes, range(3), ['XY', 'XZ', 'YZ'], [(2, 3), (2, 4), (3, 4)]):
-        bg = raw.max(axis)
-        ax.imshow(bg, cmap='gray', vmin=0, vmax=max(25, float(np.percentile(bg, 99.5))))
+        bg = view.project(raw, axis)
+        ax.imshow(bg, cmap='gray', vmin=0, vmax=max(25, float(np.percentile(bg, 99.5))), extent=view.extent(axis))
         for deleted, color, width in [(False, 'cyan', 1), (True, 'red', 2)]:
             segments = [[[n[c] for c in coords], [nodes[n[6]][c] for c in coords]]
                         for n in nodes.values() if n[6] in nodes and (n[0] in removed) == deleted]
@@ -93,8 +95,7 @@ def short_leaf_figure(raw, audit, path, provenance='recorded'):
         tips = [nodes[n] for n in sorted(removed)]
         if tips:
             ax.scatter([n[coords[0]] for n in tips], [n[coords[1]] for n in tips], c='red', marker='x', s=22)
-        ax.set_xlim(-.5, bg.shape[1]-.5)
-        ax.set_ylim(bg.shape[0]-.5, -.5)
+        view.apply(ax, axis)
         ax.set_title(plane)
         ax.axis('off')
     threshold = (f'<{audit["min_leaf_branch_length_um"]:g} um path length'

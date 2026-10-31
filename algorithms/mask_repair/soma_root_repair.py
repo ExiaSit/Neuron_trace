@@ -1,4 +1,4 @@
-"""Soma-root completion with slice-local background and measured XY boundaries.
+"""Soma-root completion with a shared intensity reference and 3D boundaries.
 Reassess generated roots from stage e; never unconditionally retain older roots.
 """
 import sys as _sys
@@ -10,7 +10,7 @@ import os,json
 from pathlib import Path
 import numpy as np
 import tifffile
-from scipy import ndimage as ndi
+from utils.gpu_ndimage import ndi
 S=np.ones((3,3,3),bool)
 
 def boundary_evidence(signal,region,background,noise):
@@ -48,10 +48,37 @@ def separate_additions(mask,added):
  assert ndi.label(mask|added,S)[1]==n
  return added,int(rollback.sum()),n
 
-def restore_roots(raw,mask,previous_result=None):
+def surface_evidence(signal,region,background,noise):
+ """Measure intensity falloff along 3D surface normals, including soma caps.
+
+ A sharp axial sheet alone is insufficient: lateral-facing surface samples
+ must also have support. Crop faces without an outward sample are excluded.
+ """
+ boundary=region&~ndi.binary_erosion(region,S)
+ for axis in range(3):
+  sl=[slice(None)]*3;sl[axis]=slice(0,3);boundary[tuple(sl)]=False
+  sl[axis]=slice(-3,None);boundary[tuple(sl)]=False
+ points=np.argwhere(boundary)
+ if len(points)<24:return dict(samples=len(points),supported_fraction=0.,lateral_samples=0,lateral_supported_fraction=0.)
+ signed=ndi.distance_transform_edt(region)-ndi.distance_transform_edt(~region)
+ gradient=np.gradient(ndi.gaussian_filter(signed,.8))
+ normals=np.stack([g[tuple(points.T)] for g in gradient],axis=1)
+ normals/=np.maximum(np.linalg.norm(normals,axis=1)[:,None],1e-6)
+ inside=ndi.map_coordinates(signal,(points+2*normals).T,order=1,mode='nearest')
+ outside=ndi.map_coordinates(signal,(points-2*normals).T,order=1,mode='nearest')
+ bg=np.asarray(background)[points[:,0]];sigma=np.asarray(noise)[points[:,0]]
+ drop=inside-outside;relative=drop/np.maximum(inside-bg,10)
+ supported=(relative>=.55)&(drop>=np.maximum(4,2.5*sigma))
+ lateral=np.abs(normals[:,0])<.7
+ return dict(samples=len(points),supported_fraction=float(supported.mean()),
+             lateral_samples=int(lateral.sum()),
+             lateral_supported_fraction=float(supported[lateral].mean()) if lateral.any() else 0.,
+             median_relative_drop=float(np.median(relative)))
+
+def restore_roots(raw,mask,previous_result=None,completed_somas=None):
  # previous_result is accepted only for API compatibility; never used as a seed.
  labels,_=ndi.label(mask,S);thick=ndi.distance_transform_edt(mask)>=2.5
- cores,_=ndi.label(thick,S);added=np.zeros_like(mask);audit=[]
+ cores,_=ndi.label(thick,S);added=np.zeros_like(mask);audit=[];completed_regions=[]
  for cid,box in enumerate(ndi.find_objects(cores),1):
   pts=np.argwhere(cores[box]==cid)
   if len(pts)<4:continue
@@ -71,50 +98,74 @@ def restore_roots(raw,mask,previous_result=None):
   # Fixed XY anchor samples the same structure through Z, while background is
   # measured in each optical plane instead of averaged with empty planes.
   peak=np.percentile(sig[:,projection],80,axis=1);amp=np.maximum(peak-bg,0)
-  valid=amp>=np.maximum(20,4*noise)
-  zseed=np.flatnonzero(seed.any((1,2)));valid[:max(0,zseed[0]-4)]=False;valid[zseed[-1]+5:]=False
-  high=bg+np.maximum.reduce([np.full_like(bg,12),4*noise,.35*amp])
-  low=bg+np.maximum.reduce([np.full_like(bg,8),3*noise,.18*amp])
+  zseed=np.flatnonzero(seed.any((1,2)))
+  # A per-plane relative threshold rescales dim caps to the width of the
+  # equator, creating cylinders. Keep local background/noise but anchor the
+  # contrast to the measured core throughout Z. Never clip at seed +/-4.
+  reference=float(np.percentile(amp[zseed],80))
+  amplitude=np.maximum(amp,reference)
+  # Half-height seeds and 35% edge contrast avoid admitting the dim halo
+  # previously accepted at 18% of each individual plane's peak.
+  high=bg+np.maximum.reduce([np.full_like(bg,12),4*noise,.5*amplitude])
+  low=bg+np.maximum.reduce([np.full_like(bg,8),3*noise,.35*amplitude])
   distance=ndi.distance_transform_edt(~seed)
   component=int(labels[sl][seed][0]);own=labels[sl]==component;other=(labels[sl]>0)&~own
   guard=~ndi.binary_dilation(other,S,iterations=2)
-  allowed=valid[:,None,None]&(distance<=20)&(sig>=high[:,None,None])&(patch>=high[:,None,None])
+  allowed=(distance<=20)&(sig>=high[:,None,None])&(patch>=high[:,None,None])
   strong=ndi.binary_propagation(seed&allowed,structure=S,mask=allowed)
   interior=ndi.binary_erosion(strong,S)
   center=(np.mean(np.argwhere(seed),axis=0)+lo)[::-1].tolist()
-  rec=dict(center_xyz=center,core_voxels=int(seed.sum()))
+  rec=dict(center_xyz=center,core_voxels=int(seed.sum()),reference_contrast=reference)
+  # Texture is assessed near the anchor, so adding smooth distant slices
+  # cannot make a granular/unsupported core pass the quality check.
+  quality=interior&(distance<=3)
   denom=np.maximum(amp[:,None,None],20)
-  roughness=float(np.mean((np.abs(patch-sig)/denom)[interior])) if interior.any() else 1
+  roughness=float(np.mean((np.abs(patch-sig)/denom)[quality])) if quality.any() else 1
   rec['roughness']=roughness
   if roughness>.055:
    audit.append(dict(rec,status='granular_or_unsupported_core'));continue
-  edge=valid[:,None,None]&(distance<=26)&(sig>=low[:,None,None])&(patch>=low[:,None,None])
+  edge=(distance<=26)&(sig>=low[:,None,None])&(patch>=low[:,None,None])
   edge&=ndi.gaussian_filter(sig,(0,1.2,1.2))>=low[:,None,None]
   edge&=ndi.distance_transform_edt(~strong)<=6
   edge&=ndi.distance_transform_edt(~own)<=18
   candidate=ndi.binary_propagation(strong,structure=S,mask=edge|strong)
-  # Require a measured lateral boundary. Axially thin sheets and saturated halos
-  # can have a sharp Z falloff but remain diffuse within the optical plane.
-  planes=[];supported=np.zeros_like(candidate)
+  # Plane measurements remain diagnostic only. Rejecting individual planes
+  # turns an evidence threshold into a flat cut through a real 3D soma.
+  planes=[]
   for z in np.flatnonzero(candidate.sum((1,2))>=25):
    fraction,drop,count=boundary_evidence(sig[z],candidate[z],float(min(bg[z],far_bg[z])),float(noise[z]))
    ok=fraction>=.55
-   planes.append(dict(z=int(z+lo[0]),background=float(bg[z]),noise=float(noise[z]),peak=float(peak[z]),threshold=float(low[z]),boundary_supported_fraction=fraction,median_boundary_drop=drop,accepted=ok))
-   if ok:supported[z]=candidate[z]
-  grown=ndi.binary_propagation(seed&supported&guard,structure=S,mask=supported&guard)
+   planes.append(dict(z=int(z+lo[0]),background=float(bg[z]),noise=float(noise[z]),peak=float(peak[z]),threshold=float(low[z]),boundary_supported_fraction=fraction,median_boundary_drop=drop,lateral_supported=ok))
+  evidence=surface_evidence(sig,candidate,np.minimum(bg,far_bg),noise)
+  rec.update(planes=planes,surface_evidence=evidence)
+  if evidence['supported_fraction']<.55 or evidence['lateral_supported_fraction']<.55 or evidence['lateral_samples']<12:
+   audit.append(dict(rec,status='no_supported_3d_boundary'));continue
+  grown=ndi.binary_propagation(seed&candidate&guard,structure=S,mask=candidate&guard)
   fresh=grown&~mask[sl]&~added[sl]
-  rec['planes']=planes
   if fresh.sum()>max(7000,6*np.count_nonzero(own&(distance<=6))):
    audit.append(dict(rec,status='excessive_growth',proposed_voxels=int(fresh.sum())));continue
   added[sl]|=fresh
+  completed_regions.append((len(audit),sl,lo,grown))
   audit.append(dict(rec,status='grown' if fresh.any() else 'no_sharp_supported_boundary',added_voxels=int(fresh.sum())))
  added,rollback,n=separate_additions(mask,added);final=mask|added
+ # Record the actual retained compact soma proposal, not the bounding box of
+ # its connected neurites (which may reach the tissue surface).
+ for index,sl,lo,grown in completed_regions:
+  points=np.argwhere(grown&final[sl])+lo
+  if len(points):
+   audit[index].update(completed_soma_top_z=int(points[:,0].min()),
+                       completed_soma_bbox_zyx=np.stack([points.min(0),points.max(0)+1],axis=1).tolist())
+   if completed_somas is not None:
+    completed_somas.append(dict(center_xyz=audit[index]['center_xyz'],points_zyx=points,
+                                top_z=int(points[:,0].min()),source='f',anchor_index=index))
  assert np.all(final[mask])
- return final,added,dict(anchors=audit,added_voxels=int(added.sum()),rollback_voxels=rollback,components_before=n,components_after=n,original_preserved=True,limits='Slice-local background/noise and XY boundary evidence. Reassesses older generated roots; preserves stage-e mask. Voxel-space uint8 heuristic; ambiguous or blurred real roots may be withheld.')
+ return final,added,dict(anchors=audit,added_voxels=int(added.sum()),rollback_voxels=rollback,components_before=n,components_after=n,original_preserved=True,shape_rule='core-referenced-3d-boundary-v1',strong_contrast_fraction=.5,edge_contrast_fraction=.35,plane_checks_diagnostic_only=True,limits='Core-referenced contrast with slice-local background/noise; whole 3D and lateral surface evidence, no per-plane clipping. Preserves stage-e mask. Voxel-space uint8 heuristic; ambiguous or blurred real roots may be withheld.')
 
 def main():
  work=Path(os.environ['RECONNECT_WORK']);raw=tifffile.imread(os.environ['RECONNECT_RAW']);mask=tifffile.imread(work/'e/connected-mask.tif')>0
- final,added,report=restore_roots(raw,mask);out=work/'f';out.mkdir(exist_ok=True)
+ bodies=[];final,added,report=restore_roots(raw,mask,completed_somas=bodies);out=work/'f';out.mkdir(exist_ok=True)
+ np.savez_compressed(out/'completed-somas.npz',**{f'body_{i}':b['points_zyx'].astype('int32') for i,b in enumerate(bodies)})
+ report['completed_somas']=[{k:v for k,v in b.items() if k!='points_zyx'} for b in bodies]
  for name,v in [('connected-mask',final),('roots-added-only',added)]:tifffile.imwrite(out/(name+'.tif'),v.astype('uint8')*255,compression='zlib')
  (out/'report.json').write_text(json.dumps(report,indent=2))
 if __name__=='__main__':main()

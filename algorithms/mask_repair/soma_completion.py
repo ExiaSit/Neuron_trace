@@ -17,7 +17,7 @@ WORK=Path(os.environ.get('RECONNECT_WORK','.'))
 import json
 import numpy as np
 import tifffile
-from scipy import ndimage as ndi
+from utils.gpu_ndimage import ndi
 from skimage.measure import marching_cubes
 O=WORK/'c'
 

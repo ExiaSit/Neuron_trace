@@ -5,7 +5,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from utils import bootstrap as _bootstrap
 
 import numpy as np
-from scipy import ndimage as ndi
+from utils.gpu_ndimage import ndi
 from scipy.spatial import cKDTree
 from skimage.graph import route_through_array
 from algorithms.tracing.signal_support import SignalEvidence

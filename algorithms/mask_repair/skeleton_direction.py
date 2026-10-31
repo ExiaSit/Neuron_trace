@@ -3,7 +3,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from utils import bootstrap as _bootstrap
 
-import sys,json
+import sys,json,time
 from pathlib import Path
 import os
 RAW_PATH=os.environ.get('RECONNECT_RAW','')
@@ -12,7 +12,7 @@ WORK=Path(os.environ.get('RECONNECT_WORK','.'))
 
 import numpy as np
 import tifffile
-from scipy import ndimage as ndi
+from utils.gpu_ndimage import ndi
 from scipy.spatial import cKDTree
 from skimage.morphology import skeletonize
 from skimage.graph import route_through_array
@@ -47,9 +47,14 @@ for cid,box in enumerate(ndi.find_objects(labels),1):
 tifffile.imwrite(O/'all-fragment-skeletons.tif',sk.astype('uint8')*255,compression='zlib')
 # Each Z plane has its own local background; do not use a full-volume MIP.
 f=raw.astype('float32');contrast=ndi.gaussian_filter(f,(0,.6,.6))-ndi.gaussian_filter(f,(0,4,4)); del f
-pairs=cKDTree([t[1] for t in tips]).query_pairs(40) if tips else set();best={};counts={}
+pairs=cKDTree([t[1] for t in tips]).query_pairs(70) if tips else set();best={};counts={}
 def reject(reason):counts[reason]=counts.get(reason,0)+1
-for i,j in sorted(pairs):
+progress_start=time.monotonic();progress_last=progress_start
+print(f'[a] endpoint pairs: {len(pairs):,}; begin 3-D validation',flush=True)
+for pair_number,(i,j) in enumerate(sorted(pairs),1):
+ if pair_number%1000==0 and time.monotonic()-progress_last>=30:
+  progress_last=time.monotonic()
+  print(f'[a] pairs {pair_number:,}/{len(pairs):,}; signal-supported groups {len(best)}; elapsed {progress_last-progress_start:.1f}s',flush=True)
  a,p,u=tips[i];b,q,w=tips[j]
  if a==b:continue
  d=q-p;gap=np.linalg.norm(d);d/=gap

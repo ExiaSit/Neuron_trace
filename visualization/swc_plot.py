@@ -31,5 +31,8 @@ def plot_swc(image: Optional[np.ndarray], swc_tree, figname='neuron_mip.png', sc
     coords = np.array([node[2:6] for node in swc_tree])
     if len(coords) > 0:
         plt.scatter(coords[:,0], coords[:,1], s=coords[:,-1]*scale, color='magenta')
+    if image is not None:
+        from visualization.swc_view import crop_xy_axes
+        crop_xy_axes(plt.gca(), image.shape[-2:], [n[2:5] for n in swc_tree])
     plt.tight_layout()
     plt.savefig(figname, dpi=300); plt.close()

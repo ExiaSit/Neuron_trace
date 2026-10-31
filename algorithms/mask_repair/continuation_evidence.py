@@ -10,10 +10,14 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from utils import bootstrap as _bootstrap
 
 import numpy as np
-from scipy import ndimage as ndi
+from utils.gpu_ndimage import ndi
 from algorithms.tracing.signal_support import SignalEvidence
 
 class ContinuationEvidence(SignalEvidence):
+    def __init__(self, raw):
+        self.raw=raw
+        self.smooth=ndi.gaussian_filter(raw.astype(np.float32),.65)
+
     def profile(self, points, tangents=None, radius=4., center_search=False):
         stats=super().profile(points,tangents,radius,center_search)
         p=np.asarray(points,float)

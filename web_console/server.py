@@ -19,12 +19,16 @@ from urllib.parse import parse_qs, unquote, urlsplit
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from web_console.runner import STAGES, ROOT, parse_request
-from web_console.versions import METHODS, DEFAULT_METHOD, method_root, preflight_request as preflight
+from web_console.versions import METHODS, DEFAULT_METHOD, method_root, runner_entry, stage_names, preflight_request as preflight
+from web_console.artifact_metadata import with_storage_paths
+from web_console.vaa3d import launch_bundle
 from web_console.comparison import comparison_artifacts, comparison_paths, comparison_summary, registered_root
 from utils.case_worker import save_json
+from web_console.pruning_index import pruning_index
+from web_console.sample_status import sample_status
 
 STATIC=Path(__file__).parent/'static'
-READABLE={'.png','.jpg','.jpeg','.webp','.swc','.tif','.tiff','.json','.log','.txt','.csv'}
+READABLE={'.png','.jpg','.jpeg','.webp','.swc','.eswc','.tif','.tiff','.json','.log','.txt','.csv'}
 HISTORY=Path('/media/pzy/U-Disk2/human_reconstruction/v0.83-ring-guard-20261016')
 BROWSE_ROOTS=[Path('/data'),Path('/mnt'),Path('/media'),Path.home()]
 
@@ -83,18 +87,27 @@ def tail(path,limit=48000):
 
 
 def artifacts(root,cid):
+    if not re.fullmatch(r'\d{1,12}',str(cid)):raise ValueError('ID 无效')
     result=[]
     # Scan only known figure/output directories, never raw source directories.
-    for folder in ['mask_step_mips','gcut_audits','comparison_sources','preparation_mips','app2_mips','mask_mips','gcut_mips','pruning_mips','comparisons','pruning_swcs',
+    for folder in ['mask_original','mask','app2_input','mask_step_mips','gcut_audits','comparison_sources','preparation_mips','app2_mips','mask_mips','gcut_mips','pruning_mips','comparisons','pruning_swcs',
                    'trace_app2/down_sampled_swcs_app2','gcut_output/selected_for_pruning',
                    'gcut_output/selected_resampled_step1','regression_guard']:
         directory=root/folder
         if not directory.is_dir():continue
+        suffixes={'.tif','.tiff'} if folder in ('mask_original','mask','app2_input') else {'.png','.swc','.eswc','.json'}
+        if folder=='comparisons':suffixes.add('.csv')
         for p in directory.iterdir():
-            if p.suffix in {'.png','.swc','.json'} and re.match(rf'^(?:image_)?{re.escape(cid)}(?:[_.]|$)',p.name) and p.is_file():
+            if p.suffix.lower() in suffixes and re.match(rf'^(?:image_)?{re.escape(cid)}(?:[_.]|$)',p.name) and p.is_file():
                 if folder=='comparisons' and p.name==f'{cid}.png' and (directory/f'{cid}_diagnostics.png').is_file():continue
-                result.append(dict(path=str(p.relative_to(root)),name=p.name,group=folder,
+                name=(f'{cid}_original_mask{p.suffix}' if folder=='mask_original' else
+                      f'{cid}_repaired_mask{p.suffix}' if folder=='mask' else p.name)
+                result.append(dict(path=str(p.relative_to(root)),name=name,group=folder,
                                    image=p.suffix=='.png',size=p.stat().st_size,mtime=p.stat().st_mtime_ns))
+    summary=root/'logs'/cid/'pruning-audit.json'
+    if summary.is_file():
+        result.append(dict(path=str(summary.relative_to(root)),name=f'{cid}_pruning-audit.json',
+                           group='pruning_mips',image=False,size=summary.stat().st_size,mtime=summary.stat().st_mtime_ns))
     for item in result:
         if not item['image']:continue
         try:
@@ -113,7 +126,7 @@ def artifacts(root,cid):
                 item['description']=('旧版 APP2 来源：'+info['path']+' · 坐标转换：'+info['transform']) if info['status']=='present' else '配置目录中没有匹配此 ID 的旧版 APP2'
         except (OSError,ValueError,KeyError,TypeError):
             pass  # The image can appear just before its atomic sidecar is published.
-    return result
+    return with_storage_paths(root,result)
 
 
 class Manager:
@@ -133,7 +146,7 @@ class Manager:
             if (job/'job.json').exists():
                 p=job/'progress.json'
                 state=json.loads(p.read_text()) if p.exists() else {}
-                if state.get('status') in ('running','pausing','queued'):
+                if state.get('status') in ('running','pausing','queued') and not json.loads((job/'job.json').read_text()).get('read_only'):
                     state.update(status='interrupted',error='服务重启，任务已中断；可检查后续跑');save_json(p,state)
 
     def directory(self,jid):
@@ -145,6 +158,8 @@ class Manager:
     def summary(self,job):
         record=json.loads((job/'job.json').read_text());p=job/'progress.json'
         progress=json.loads(p.read_text()) if p.exists() else {'status':'queued','completed':{}}
+        if record.get('read_only') and progress.get('status') in ('running','queued') and p.exists() and time.time()-p.stat().st_mtime>90:
+            progress=dict(progress,status='interrupted',stale=True)
         return dict(id=job.name,name=record['request']['name'],request=record['request'],
                     created_at=record['created_at'],output_root=str(job/'reconstruction'),
                     prepared_root=str(job/'prepared'),progress=progress,active=self.active==job.name,
@@ -177,7 +192,7 @@ class Manager:
             state.update(status='running');save_json(job/'progress.json',state)
             log=(job/'worker.log').open('a')
             try:
-                self.process=subprocess.Popen([sys.executable,str(source_root/'web_console/runner.py'),'--job',str(job)],
+                self.process=subprocess.Popen([sys.executable,str(runner_entry(summary['method_version'])),'--job',str(job)],
                                               cwd=source_root,stdout=log,stderr=subprocess.STDOUT,start_new_session=True,
                                               env=dict(os.environ,PYTHONUNBUFFERED='1',OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='1',MKL_NUM_THREADS='1'))
             finally:log.close()
@@ -261,14 +276,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def get(self):
         parsed=urlsplit(self.path);path=unquote(parsed.path);q=parse_qs(parsed.query);m=self.server.manager
-        if path in ('/','/index.html','/app.js','/picker.js','/style.css'):
+        if path in ('/','/index.html','/app.js','/pruning.js','/picker.js','/resources.js','/vaa3d.js','/style.css'):
             return self.file(STATIC/('index.html' if path=='/' else path.lstrip('/')))
         if path=='/api/bootstrap':
             cfg=json.loads((ROOT/'config.example.json').read_text())
             defaults=dict(metadata_file=cfg['metadata_file'],v3d_root=cfg['v3d_root'])
             defaults_path=ROOT/'web_console/input_defaults.json'
             if defaults_path.is_file():defaults.update(json.loads(defaults_path.read_text()))
-            return self.json(dict(methods=[dict(id=k,label=v['label']) for k,v in METHODS.items()],default_method=DEFAULT_METHOD,stages=STAGES,input_defaults=defaults,metadata_file=cfg['metadata_file'],v3d_root=cfg['v3d_root'],
+            return self.json(dict(methods=[dict(id=k,label=v['label'],description=v.get('description',''),stages=stage_names(k,STAGES)) for k,v in METHODS.items()],default_method=DEFAULT_METHOD,stages=STAGES,input_defaults=defaults,metadata_file=cfg['metadata_file'],v3d_root=cfg['v3d_root'],
                                   revision=cfg['method_revision'],history_available=HISTORY.is_dir(),
                                   token_file=str(m.token_path),job_root=str(m.jobs)))
         if not self.authorized(q):return self.json({'error':'请先输入控制口令连接工作台'},401)
@@ -276,8 +291,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(browse_directory(q.get('path',[''])[0],q.get('kind',['directory'])[0],
                                               q.get('q',[''])[0],int(q.get('offset',['0'])[0])))
         if path=='/api/jobs':return self.json(m.all())
+        if path=='/api/pruning-index':
+            job=m.directory(q.get('id',[''])[0])
+            return self.json(pruning_index(job/'reconstruction',m.summary(job)['request']['ids']))
         if path=='/api/job':
             job=m.directory(q.get('id',[''])[0]);data=m.summary(job)
+            data['sample_status']=sample_status(job,data['request'],data['progress'],data['read_only'],data['active'])
             cid=q.get('cell',[data['request']['ids'][0]])[0]
             if cid not in data['request']['ids']:raise ValueError('样本不属于本任务')
             data['artifacts']=artifacts(job/'reconstruction',cid)
@@ -285,6 +304,7 @@ class Handler(BaseHTTPRequestHandler):
                 record=json.loads((job/'job.json').read_text())
                 data['artifacts']+=comparison_artifacts(record,cid)
                 data['comparison_summary']=comparison_summary(record,cid)
+            data['vaa3d']=launch_bundle(job/'reconstruction',cid,data['artifacts'],job/'prepared')
             data['pause_requested']=(job/'pause.request').exists() and data['active']
             current=data['progress'].get('current');log=q.get('log',[''])[0]
             if log and re.fullmatch(r'\d{1,12}-\d{2}',log):logpath=job/'logs'/f'{log}.log'
@@ -299,7 +319,8 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/api/history':
             cid=q.get('cell',['16984'])[0]
             if not re.fullmatch(r'\d{1,12}',cid):raise ValueError('ID 无效')
-            return self.json(dict(id=cid,artifacts=artifacts(HISTORY,cid),source=str(HISTORY)))
+            items=artifacts(HISTORY,cid)
+            return self.json(dict(id=cid,artifacts=items,source=str(HISTORY),vaa3d=launch_bundle(HISTORY,cid,items)))
         if path=='/api/file':
             relative=q.get('path',[''])[0]
             if q.get('history')==['1']:
@@ -336,7 +357,7 @@ class Handler(BaseHTTPRequestHandler):
             if not self.authorized({}):return self.json({'error':'需要控制口令'},401)
             if path=='/api/check':
                 req=parse_request(body);plan=preflight(req)
-                return self.json(dict(ok=True,ids=req['ids'],required=plan['required'],stages=STAGES[req['start']-1:req['stop']],
+                return self.json(dict(ok=True,ids=req['ids'],required=plan['required'],stages=stage_names(req['method_version'],STAGES)[req['start']-1:req['stop']],
                                       message=f"{len(req['ids'])} 个样本输入检查通过"))
             if path=='/api/jobs':return self.json(m.create(body),201)
             jid=body.get('id','')

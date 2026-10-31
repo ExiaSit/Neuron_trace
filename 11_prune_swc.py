@@ -25,7 +25,30 @@ def run(spec):
     foreign=confirmed_mask(tifffile.imread(p['raw']).shape,aux_labels,aux_origin,[int(x) for x in np.unique(aux_labels) if x and x not in protected_aux],dict(same_auxiliary_components=[]))
     core_sl,core_region,core_audit=target_core_region(tifffile.imread(p['raw']),target_zyx,foreign)
     mod.CONFIRMED_SOMA_MASK[core_sl] |= core_region
+    from algorithms.tracing.sheet_signal import completed_soma_protection
+    mod.SHEET_PROTECTED_SOMA_MASK,sheet_protection_source=completed_soma_protection(
+        r/'mask_steps'/cid/'f/completed-somas.npz',mod.CONFIRMED_SOMA_MASK.shape,mod.CONFIRMED_SOMA_MASK)
+    save_json(r/'logs'/cid/'sheet-soma-protection.json',dict(source=sheet_protection_source))
     save_json(r/'logs'/cid/'target-core-protection.json',core_audit)
+    # Preserve foreign-soma entry evidence before old pruning clips those children.
+    from algorithms.tracing.repair_evidence import foreign_entry_ancestors
+    neighbor_points = []
+    if not aux_audit['same_auxiliary_components']:
+        for label in np.unique(aux_labels):
+            if not label:
+                continue
+            points = np.argwhere(aux_labels == label) + aux_origin
+            if len(points) >= 20 and np.linalg.norm(points-target_zyx, axis=1).min() > 5.:
+                neighbor_points.extend(points.tolist())
+    original_path = p['original_mask']
+    measured_soma_path = r/'app2_input'/f'{cid}_soma.tif'
+    mod.REPAIR_EVIDENCE_CONTEXT = None
+    if original_path.exists() and measured_soma_path.exists():
+        pre_tree = np.loadtxt(p['resampled'], ndmin=2).tolist()
+        mod.REPAIR_EVIDENCE_CONTEXT = dict(
+            original_mask_path=str(original_path), measured_soma_path=str(measured_soma_path),
+            neighbor_points=neighbor_points,
+            foreign_witness_ids=foreign_entry_ancestors(pre_tree, neighbor_points))
     del foreign
     confirmed=[x['center_zyx'] for x in aux_audit['same_auxiliary_components']]
     save_json(r/'logs'/cid/'prune-soma-groups.json',aux_audit)
@@ -42,7 +65,8 @@ def run(spec):
     if audit.exists():
         from collections import Counter
         details=json.loads(audit.read_text())
-        save_json(r/'logs'/cid/'pruning-audit.json',dict(signal_gap_decisions=details.get('signal_gap_decisions',[]),crossing_decisions=details.get('crossing_decisions',[]),removal_counts=dict(Counter(v['code'] for v in details.get('removed_nodes',{}).values()))))
+        save_json(r/'logs'/cid/'pruning-audit.json',dict(signal_gap_decisions=details.get('signal_gap_decisions',[]),crossing_decisions=details.get('crossing_decisions',[]),sheet_signal_decisions=details.get('sheet_signal_decisions',[]),
+            repair_evidence_audit=details.get('repair_evidence_audit'),soma_terminal_audit=details.get('soma_terminal_audit'),final_short_leaf_audit=details.get('final_short_leaf_audit'),removal_counts=dict(Counter(v['code'] for v in details.get('removed_nodes',{}).values()))))
 
 if __name__=="__main__":
     from utils.stage_cli import run_spec

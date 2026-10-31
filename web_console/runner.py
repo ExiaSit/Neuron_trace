@@ -96,6 +96,11 @@ def base_config(req, job):
                workers=1,preprocess_workers=1,inference_batch_size=1,gpu_id=req['gpu_id'],
                baseline_root=None,validated_baseline_registry=None,previous_swc_dirs=[],
                soma_overrides_image_xyz={})
+    cfg['method_version']=req.get('method_version',cfg['method_version'])
+    from web_console.versions import METHODS
+    if METHODS[cfg['method_version']].get('engine')=='legacy':
+        cfg['method_revision']=cfg['method_version']+'-native-console'
+        cfg.pop('mask_mip',None)
     if req.get('previous_app2_dir'):
         cfg['previous_app2_dirs']=[str(local_path(req['previous_app2_dir'],'旧版 APP2 目录'))]
     return cfg
@@ -110,6 +115,8 @@ def preflight(req):
     import numpy as np
     import tifffile
     cfg=base_config(req,Path('/unused'))
+    from web_console.versions import METHODS
+    legacy=METHODS[req.get('method_version','v0.83a')].get('engine')=='legacy'
     cfg['metadata_file']=str(local_path(req['metadata_file'],'metadata_file'))
     try:
         table=read_metadata(cfg)
@@ -147,7 +154,14 @@ def preflight(req):
         for key in sorted(needed):
             if key=='source': p=source_path(req,cid,meta,v3d_index)
             elif key in UPSTREAM:
-                p=local_path(req['upstream_root'],'upstream_root')/UPSTREAM[key].format(id=cid)
+                upstream=local_path(req['upstream_root'],'upstream_root')
+                p=upstream/UPSTREAM[key].format(id=cid)
+                if not p.is_file():
+                    prefixed=p.with_name('image_'+p.name)
+                    if prefixed.is_file():p=prefixed
+                    elif key=='final':
+                        native_final=upstream/'gcut_pruned/pruning_swcs'/f'image_{cid}.swc'
+                        if native_final.is_file():p=native_final
             else:
                 found,duplicates=indexes[key]
                 if cid in duplicates:raise ValueError(f'{cid}：{INPUT_FIELDS[key][0]} 存在重复文件')
@@ -170,7 +184,11 @@ def preflight(req):
                 with tifffile.TiffFile(inputs['repaired']) as tif:
                     if tif.series[0].shape!=shape:raise ValueError(f'{cid}：修复 mask 与原图尺寸不一致')
         cases.append(dict(id=cid,metadata=meta,inputs=inputs,stamps={k:file_stamp(p) for k,p in inputs.items()}))
-    return dict(cases=cases,required=sorted(needed),code_digest=code_digest(),
+    native={}
+    if legacy:
+        from web_console.legacy_stage import code_digest as native_digest
+        native['native_code_digest']=native_digest(req['method_version'])
+    return dict(**native,cases=cases,required=sorted(needed),code_digest=code_digest(),
                 metadata_stamp=file_stamp(cfg['metadata_file']),checked_at=time.time())
 
 
@@ -187,9 +205,38 @@ def case_paths(job,cid):
                 comparison=str(out/'comparisons'/f'{cid}.png'))
 
 
+def run_legacy_stage(spec_path,spec,stage):
+    cfg=spec['config'];out=Path(cfg['output_root']);cid=spec['id']
+    if stage==7:
+        # This slot is a passthrough for versions with no mask completion.
+        copy=Path(spec['repaired']);copy.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copy2(spec['mask'],copy)
+        save_json(out/'logs'/cid/'continuity.json',dict(method_version=cfg['method_version'],
+            mask_repair=False,decision='original_merged_mask',root_geodesic_enabled=False))
+        from utils import mask_batch
+        mask_batch.make_mip((Path(spec['raw']),Path(spec['mask']),copy),out/'mask_mips'/f'{cid}.png')
+    elif stage==12:
+        save_json(Path(spec['guard']),dict(method_version=cfg['method_version'],
+            decision='native_version_no_publication_guard',historical_replacement=False))
+    elif stage==13:
+        from visualization.comparison import comparison
+        comparison(dict(spec,selection_reason=cfg['method_version']+' native pipeline'))
+    else:
+        from web_console.versions import method_root
+        subprocess.run([sys.executable,str(ROOT/'web_console/legacy_stage.py'),'--spec',str(spec_path),
+                        '--stage',str(stage)],cwd=method_root(cfg['method_version']),check=True)
+
+
 def run_stage(spec_path,stage):
     spec=json.loads(spec_path.read_text())
-    if stage<=6:
+    from web_console.versions import METHODS
+    legacy=METHODS[spec['config'].get('method_version','v0.83a')].get('engine')=='legacy'
+    if not legacy and stage>=7 and Path(spec['mask']).is_file():
+        from utils.mask_storage import preserve_original_mask
+        preserve_original_mask(spec)
+    if legacy:
+        run_legacy_stage(spec_path,spec,stage)
+    elif stage<=6:
         from utils.preparation import load_step,inference
         if stage in (4,5):inference([spec],'soma' if stage==4 else 'neurite')
         else:load_step(stage).run(spec)
@@ -202,6 +249,9 @@ def run_stage(spec_path,stage):
             run_worker(spec_path,mask_only=True)
         else:mod.run(spec)
     if stage<=6:
+        if not legacy and stage==6:
+            from utils.mask_storage import preserve_original_mask
+            preserve_original_mask(spec)
         import numpy as np
         import tifffile
         import matplotlib
@@ -239,7 +289,9 @@ def run_locked_job(job):
         for case in plan['cases']:
             for k,p in case['inputs'].items():
                 if file_stamp(p)!=case['stamps'][k]:raise ValueError(f'输入已变化：{p}；请创建新实验')
-        cfg=base_config(req,job);save_json(job/'config.json',cfg)
+        cfg=base_config(req,job)
+        if 'native_code_digest' in plan:cfg['native_code_digest']=plan['native_code_digest']
+        save_json(job/'config.json',cfg)
         for case in plan['cases']:
             cid=case['id'];p=case_paths(job,cid)
             (job/'reconstruction/logs'/cid).mkdir(parents=True,exist_ok=True)
@@ -252,7 +304,13 @@ def run_locked_job(job):
             spec=dict(p,id=cid,config=cfg,metadata=case['metadata'],old_swcs=[],
                       selection_reason='web_console_candidate_without_baseline',fingerprint=plan['code_digest']+job.name)
             manifest=job/'reconstruction/manifests'/f'{cid}.json';save_json(manifest,spec)
+            from web_console.versions import stage_names
+            names=stage_names(req.get('method_version','v0.83a'),STAGES)
             for stage in range(req['start'],req['stop']+1):
+                if 'native_code_digest' in plan:
+                    from web_console.legacy_stage import code_digest as native_digest
+                    if native_digest(req['method_version'])!=plan['native_code_digest']:
+                        raise ValueError('所选版本代码已变化，请创建新实验')
                 if (job/'pause.request').exists():
                     progress.update(status='paused',current=None);save_json(progress_path,progress);return
                 key=f'{cid}:{stage}'
@@ -263,9 +321,9 @@ def run_locked_job(job):
                     if stage!=11 or f'{cid}:12' not in progress['completed']:
                         if [file_stamp(x) for x in outputs]!=previous['outputs']:raise ValueError(f'{key} 输出已变化，请新建实验')
                     continue
-                progress.update(current=dict(id=cid,stage=stage,name=STAGES[stage-1]),status='running')
+                progress.update(current=dict(id=cid,stage=stage,name=names[stage-1]),status='running')
                 save_json(progress_path,progress)
-                print(f'[{cid}] {stage:02d} {STAGES[stage-1]} 开始',flush=True)
+                print(f'[{cid}] {stage:02d} {names[stage-1]} 开始',flush=True)
                 log=job/'logs'/f'{cid}-{stage:02d}.log';log.parent.mkdir(parents=True,exist_ok=True)
                 env=dict(os.environ,OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='1',MKL_NUM_THREADS='1',MPLBACKEND='Agg',PYTHONUNBUFFERED='1')
                 started=time.time()

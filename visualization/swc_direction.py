@@ -319,6 +319,10 @@ def plot_mip_overlay(
     zoom_axis.set_xlim(max(0.0, x_mid - half), min(float(width - 1), x_mid + half))
     zoom_axis.set_ylim(min(float(height - 1), y_mid + half), max(0.0, y_mid - half))
 
+    from visualization.swc_view import crop_xy_axes
+    for ax in axes:
+        crop_xy_axes(ax, (height, width), node_xy)
+
     seg_name = f", seg={seg_path.name}" if seg_path is not None else ""
     fig.suptitle(
         (

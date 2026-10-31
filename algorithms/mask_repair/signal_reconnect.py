@@ -13,7 +13,7 @@ WORK=Path(os.environ.get('RECONNECT_WORK','.'))
 
 import numpy as np
 import tifffile
-from scipy import ndimage as ndi
+from utils.gpu_ndimage import ndi
 from scipy.spatial import cKDTree
 from skimage.graph import route_through_array
 from skimage.measure import marching_cubes
@@ -28,7 +28,7 @@ CFG=dict(small_max_gap=18,small_neighbors=5,min_signal_fraction=.85,min_layer_fr
 def unambiguous(scores):
     return len(scores)==1 or (scores[1]-scores[0])/max(scores[1],1e-9)>=CFG['ambiguity_margin']
 
-def path_evidence(raw,contrast,labels,p,q,a,b,kind):
+def path_evidence(raw,contrast,labels,p,q,a,b,kind,pair_corridor=None):
     p=np.asarray(p,int);q=np.asarray(q,int);gap=float(np.linalg.norm(q-p))
     if gap<1:return None,'touching'
     lo=np.maximum(0,np.minimum(p,q)-7);hi=np.minimum(raw.shape,np.maximum(p,q)+8);sl=tuple(slice(int(x),int(y)) for x,y in zip(lo,hi))
@@ -40,6 +40,15 @@ def path_evidence(raw,contrast,labels,p,q,a,b,kind):
     strength=np.maximum(c,0)/sigma
     line=np.ones(c.shape,bool);ix=np.rint(np.linspace(start,end,int(gap*3)+2)).astype(int);line[tuple(ix.T)]=False
     allowed=(ndi.distance_transform_edt(line)<=5)&((l==0)|(l==a)|(l==b))
+    if pair_corridor is not None:
+        origin,volume=pair_corridor
+        clipped=np.zeros(c.shape,bool)
+        begin=np.maximum(lo,origin);stop=np.minimum(hi,origin+np.asarray(volume.shape))
+        if np.all(stop>begin):
+            dst=tuple(slice(int(x),int(y)) for x,y in zip(begin-lo,stop-lo))
+            src=tuple(slice(int(x),int(y)) for x,y in zip(begin-origin,stop-origin))
+            clipped[dst]=volume[src]
+        allowed &= clipped
     cost=1+12/(1+strength);cost[~allowed]=np.inf
     try:
         path,total=route_through_array(cost,tuple(start),tuple(end),fully_connected=True)
@@ -154,35 +163,104 @@ def main():
         elif not unambiguous([e['cost'] for e in ranked]):row['status']='ambiguous_best_two'
         else:row['status']='proposed';proposals.append(ranked[0])
         small_audit.append(row)
+    # Supplemental, pair-local nomination: preserve established candidates first.
+    from algorithms.mask_repair.local_pair_mip import configuration, endpoint_pairs, pair_evidence
+    local_config=configuration();local_audit=[]
+    if local_config['enabled']:
+        existing={(min(e['source'],e['target']),max(e['source'],e['target'])) for e in proposals}
+        for a,b,p,q,segment_a,segment_b in endpoint_pairs(records,skeletons,local_config):
+            if (min(a,b),max(a,b)) in existing:continue
+            if a in soma_ids and b in soma_ids:continue
+            corridor,rec=pair_evidence(raw,p,q,segment_a,segment_b,local_config)
+            rec.update(source=int(a),target=int(b),gap=float(np.linalg.norm(q-p)))
+            index=len(local_audit);local_audit.append(rec)
+            if not rec['passed']:
+                rec['status']='rejected_projection';continue
+            # Only measured contrast supplies the final 3-D evidence. No MIP boost.
+            e,reason=path_evidence(raw,RAW_CONTRAST,lab,p,q,a,b,'local_endpoint_mip',pair_corridor=corridor)
+            if not e:
+                rec.update(status='rejected_3d',reason=reason);continue
+            if rec.get('requires_strong_3d') and (e['raw_signal_fraction']<.9 or e['transverse_ridge_fraction']<.75):
+                rec.update(status='rejected_3d',reason='projection_tolerance_needs_strong_3d');continue
+            e['projection_tolerance']=rec.get('requires_strong_3d',False)
+            # Preserve candidates admitted by the previous rules before new exceptions.
+            bridge_points=solid_bridge(e['path_zyx'],mask.shape)
+            box_lo=np.maximum(0,bridge_points.min(0)-1);box_hi=np.minimum(mask.shape,bridge_points.max(0)+2)
+            box=tuple(slice(int(x),int(y)) for x,y in zip(box_lo,box_hi))
+            bridge_patch=np.zeros(box_hi-box_lo,bool);bridge_patch[tuple((bridge_points-box_lo).T)]=True
+            touches=set(np.unique(lab[box][ndi.binary_dilation(bridge_patch,np.ones((3,3,3)))]))-{0}
+            e['extended_local_rule']=bool(rec.get('requires_multiscale_direction') or
+                                          e['projection_tolerance'] or touches!={a,b})
+            rec['extended_local_rule']=e['extended_local_rule']
+
+            rec.update(status='proposed',path_zyx=e['path_zyx'])
+            e.update(route_source='local_three_view_mip_raw_3d',local_pair_index=index)
+            proposals.append(e)
+    from algorithms.mask_repair.fragment_chain import chain_fragments, unapproved_bridge_overlap
+    members={i:{i} for i in range(1,n+1)}
     parent=list(range(n+1));root_somas={i:({i} if i in soma_ids else set()) for i in range(1,n+1)}
     def root(i):
         while parent[i]!=i:i=parent[i]
         return i
     added=np.zeros(mask.shape,bool);accepted=[];used_small=set()
     # First anchor directional neurites, then resolve uncertain fragments.
-    for e in sorted(proposals,key=lambda e:(e['kind']=='small_fragment',e['cost'])):
+    for e in sorted(proposals,key=lambda e:(e['kind']=='local_endpoint_mip',e['kind']=='small_fragment',e.get('extended_local_rule',False),e['cost'])):
         a,b=e['components'];ra,rb=root(a),root(b);reason=None
         if ra==rb:reason='cycle'
         elif root_somas[ra] and root_somas[rb]:reason='would_merge_distinct_soma_components'
         elif e['kind']=='small_fragment' and e['source'] in used_small:reason='small_fragment_already_attached'
         coords=solid_bridge(e['path_zyx'],mask.shape);lo=np.maximum(0,coords.min(0)-1);hi=np.minimum(mask.shape,coords.max(0)+2);sl=tuple(slice(int(x),int(y)) for x,y in zip(lo,hi));bridge=np.zeros(hi-lo,bool);bridge[tuple((coords-lo).T)]=True;halo=ndi.binary_dilation(bridge,structure=np.ones((3,3,3)))
-        if set(np.unique(lab[sl][halo]))-{0}!={a,b}:reason=reason or 'touches_third_fragment'
-        if np.any(added[sl]&halo):reason=reason or 'touches_prior_bridge'
-        if reason:rejected.append(dict(source=e['source'],target=e['target'],kind=e['kind'],reason=reason));continue
+        touched=set(np.unique(lab[sl][halo]))-{0}
+        chain,chain_reason=chain_fragments(e,touched,surfaces,soma_ids,root,members,RAW_CONTRAST)
+        if chain_reason:reason=reason or chain_reason
+        roots={root(i) for i in ({a,b}|set(chain))}
+        if len(set().union(*(root_somas[i] for i in roots)))>1:
+            reason=reason or 'would_merge_distinct_soma_components'
+        if unapproved_bridge_overlap(added[sl]&halo,lo,accepted,set(chain),roots,root,solid_bridge,mask.shape):
+            reason=reason or 'touches_prior_bridge'
+        if reason:
+            rejected.append(dict(source=e['source'],target=e['target'],kind=e['kind'],reason=reason))
+            if 'local_pair_index' in e:local_audit[e['local_pair_index']].update(status='rejected_topology',reason=reason)
+            continue
         assert ndi.label(bridge)[1]==1
-        fresh=~mask[tuple(coords.T)];added[tuple(coords[fresh].T)]=True;parent[ra]=rb;root_somas[rb]|=root_somas[ra]
+        fresh=(~mask[tuple(coords.T)])&(~added[tuple(coords.T)])
+        added[tuple(coords[fresh].T)]=True
+        e['chain_fragment_ids']=chain;e['component_reduction']=len(roots)-1
+        combined_members=set().union(*(members[i] for i in roots))
+        combined_somas=set().union(*(root_somas[i] for i in roots))
+        for rid in roots:parent[rid]=rb
+        members[rb]=combined_members;root_somas[rb]=combined_somas
         if e['kind']=='small_fragment':used_small.add(e['source'])
         e['added_voxels']=int(fresh.sum());accepted.append(e)
+        if 'local_pair_index' in e:local_audit[e['local_pair_index']].update(status='accepted',added_voxels=int(fresh.sum()),chain_fragment_ids=chain,component_reduction=e['component_reduction'])
     accepted_small={e['source']:e['target'] for e in accepted if e['kind']=='small_fragment'}
+    incorporated={cid for edge in accepted for cid in edge.get('chain_fragment_ids',[])}
     for row in small_audit:
-        if row['status']=='proposed':
+        if row['fragment'] in incorporated and row['fragment'] not in accepted_small:
+            row['status']='accepted_in_fragment_chain'
+        elif row['status']=='proposed':
             row['status']='accepted' if row['fragment'] in accepted_small else 'blocked_by_topology_or_collision'
-    connected=mask|added;after=ndi.label(connected,np.ones((3,3,3)))[1];assert after==n-len(accepted)
+    connected=mask|added;after=ndi.label(connected,np.ones((3,3,3)))[1];assert after==n-sum(e['component_reduction'] for e in accepted)
     faceslab=ndi.label(connected)[0]
     for e in accepted:
         p=np.array(e['path_zyx']);assert len(np.unique(faceslab[tuple(p.T)]))==1
     for name,a in [('connected-mask',connected),('bridges-only',added)]:tifffile.imwrite(O/(name+'.tif'),a.astype('uint8')*255,compression='zlib')
-    report=dict(config=CFG,backmap=BACKMAP_STATS,soma_regions=bodies,soma_component_ids=sorted(soma_ids),fragments_before=n,fragments_after=after,added_voxels=int(added.sum()),accepted=accepted,small_fragment_audit=small_audit,rejected=rejected,limitations='Soma-like thick cores are heuristic; voxel spacing uncalibrated; minimum bridge thickness is not measured neurite thickness. Cost is not a probability. Existing mixed-neuron components cannot be separated by this trial.')
+    from collections import Counter
+    local_summary=dict(config=local_config,candidate_pairs=len(local_audit),
+                       statuses=dict(Counter(x['status'] for x in local_audit)),
+                       rejections=dict(Counter(x['reason'] for x in local_audit if x['status'].startswith('rejected'))))
+    pair_report=dict(summary=local_summary,pairs=local_audit)
+    (O/'local-pair-mip.json').write_text(json.dumps(pair_report,indent=2))
+    if local_config['enabled']:
+        # Keep review artifacts outside disposable mask_steps checkpoints.
+        review=WORK.parent.parent/'mask_step_mips';review.mkdir(parents=True,exist_ok=True)
+        cid=WORK.name
+        pair_report.update(provenance='recorded_local_pair_mip',removed_voxels=0,
+                           added_voxels=sum(x.get('added_voxels',0) for x in local_audit if x['status']=='accepted'))
+        (review/f'{cid}_02_local_pairs.json').write_text(json.dumps(pair_report,indent=2))
+        from visualization.local_pair_mip import draw_local_pairs
+        draw_local_pairs(raw,pair_report,review/f'{cid}_02_local_pairs.png')
+    report=dict(local_pair_mip=local_summary,config=CFG,backmap=BACKMAP_STATS,soma_regions=bodies,soma_component_ids=sorted(soma_ids),fragments_before=n,fragments_after=after,added_voxels=int(added.sum()),accepted=accepted,small_fragment_audit=small_audit,rejected=rejected,limitations='Soma-like thick cores are heuristic; voxel spacing uncalibrated; minimum bridge thickness is not measured neurite thickness. Cost is not a probability. Existing mixed-neuron components cannot be separated by this trial.')
     (O/'report.json').write_text(json.dumps(report,indent=2));print('RESULT',n,after,len(accepted),int(added.sum()),flush=True)
     print('KINDS',{k:sum(e['kind']==k for e in accepted) for k in ['neurite_to_neurite','neurite_to_soma','small_fragment']},flush=True)
 

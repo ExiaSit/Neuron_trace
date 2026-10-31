@@ -58,7 +58,7 @@ class DiagnosticTests(unittest.TestCase):
             root=Path(tmp);swc=root/'in.swc';somas=root/'somas.txt'
             swc.write_text('1 1 0 0 0 1 -1\n2 3 .1 0 0 .01 1\n3 3 10 0 0 .01 2\n4 3 20 10 0 .01 3\n5 3 10 1 0 .01 3\n6 3 10 2 0 .01 5\n')
             somas.write_text('1\n')
-            segmentor=make_segmentor(str(swc),str(somas));audit=segmentor.short_leaf_audit
+            segmentor=make_segmentor(str(swc),str(somas),min_leaf_length_um=7.75);audit=segmentor.short_leaf_audit
             self.assertNotIn(2,{n[0] for n in audit['before_nodes']})
             self.assertNotIn(2,audit['removed_ids'])
             self.assertEqual(audit['removed_ids'],[5,6])
@@ -68,6 +68,19 @@ class DiagnosticTests(unittest.TestCase):
             names={a['name'] for a in artifacts(root,'42')}
             self.assertIn('42_short_leaves.png',names)
             self.assertIn('42_short_leaves_before.swc',names)
+
+    def test_pruning_summary_artifact_is_cell_scoped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            for cid in ['42','420']:
+                p=root/'logs'/cid/'pruning-audit.json'
+                p.parent.mkdir(parents=True)
+                p.write_text('{"removal_counts": {"qc_merge_close_point": 2}}')
+            entries=artifacts(root,'42')
+            self.assertEqual([a['path'] for a in entries],['logs/42/pruning-audit.json'])
+            self.assertEqual(entries[0]['name'],'42_pruning-audit.json')
+            self.assertFalse(entries[0]['image'])
+            with self.assertRaises(ValueError):artifacts(root,'../../other')
 
     def test_mask_step_uses_provided_predecessor(self):
         with tempfile.TemporaryDirectory() as tmp:

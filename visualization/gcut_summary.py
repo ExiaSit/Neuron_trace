@@ -143,6 +143,11 @@ def save_comprehensive_summary(img, binary_img, dist_transform, gsdt_mask, globa
     else:
         ax[4].text(0.5, 0.5, 'No Target Match', color='white', ha='center', va='center', fontsize=16, transform=ax[4].transAxes)
 
+    from visualization.swc_view import crop_xy_axes
+    before_nodes = short_leaf_audit['before_nodes'] if short_leaf_audit else []
+    crop_xy_axes(ax[6], img_show.shape, [n[2:5] for n in list(app2_tree or []) + list(before_nodes)])
+    crop_xy_axes(ax[5], img_show.shape, [n[2:5] for tree in (split_trees or {}).values() for n in tree])
+    crop_xy_axes(ax[4], img_show.shape, [n[2:5] for n in (split_trees or {}).get(target_soma_id, [])])
     plt.tight_layout()
     plt.savefig(save_path, dpi=200)
 
