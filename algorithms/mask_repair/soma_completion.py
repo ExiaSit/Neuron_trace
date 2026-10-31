@@ -97,13 +97,15 @@ def main():
         other=(lab>0)&(lab!=anchor)
         body&=~ndi.binary_dilation(other,structure=np.ones((3,3,3)))
         guarded[sl]|=body
-    soma=guarded;added=soma&~previous;fixed=previous|soma
+    # v0.83b: retain soma evidence for d/e, but never write inferred body
+    # volume into the repair mask. References must already be foreground.
+    soma=guarded&previous;added=np.zeros_like(previous);fixed=previous.copy()
     for rec in records:
         sl=tuple(slice(a,b) for a,b in rec['bbox_zyx']);local=soma[sl];rec['previous_coverage_fraction']=float(np.sum(local&previous[sl])/max(local.sum(),1));rec['new_voxels']=int(added[sl].sum())
     assert np.all(fixed[previous])
     n0=ndi.label(previous,np.ones((3,3,3)))[1];n1=ndi.label(fixed,np.ones((3,3,3)))[1]
     for name,data in [('connected-mask',fixed),('soma-only',soma),('soma-added-only',added)]:tifffile.imwrite(O/(name+'.tif'),data.astype('uint8')*255,compression='zlib')
-    report=dict(somas=records,rejected_candidates=REJECTIONS,new_soma_voxels=int(added.sum()),components_before=n0,components_after=n1,previous_mask_preserved=True,limits='3D compact-core detection, half-height bounded growth, multi-core separation and original-component guards. Broad cores above 10 voxels are withheld, including potentially real large somas. uint8 and voxel-space thresholds; no biological ground truth.')
+    report=dict(somas=records,rejected_candidates=REJECTIONS,new_soma_voxels=0,components_before=n0,components_after=n1,previous_mask_preserved=True,soma_completion_enabled=False,reference_only=True,limits='v0.83b: soma evidence restricted to incoming foreground; connected-mask is identical to stage b. No soma volume is added.')
     (O/'report.json').write_text(json.dumps(report,indent=2));print(json.dumps(report),flush=True)
 
 if __name__=='__main__':main()

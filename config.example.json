@@ -1,6 +1,6 @@
 {
-  "method_version": "v0.83a",
-  "app2_input_mode": "mask",
+  "method_version": "v0.83b",
+  "app2_input_mode": "skeleton_soma",
   "app2_soma_source": "segmentation",
   "app2_soma_opening_radius_um": 3,
   "app2_soma_shape": "signal_surface",
@@ -31,7 +31,7 @@
   ],
   "app2_temp_dir": "/tmp/neuron-app2-v083",
   "baseline_root": null,
-  "method_revision": "multiaxis-overlapping-mip-no-root-geodesic-20261026",
+  "method_revision": "no-soma-volume-completion-20261101",
   "validated_baseline_registry": null,
   "input_mode": "v3d",
   "neuron_ids": [],

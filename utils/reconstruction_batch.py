@@ -84,8 +84,8 @@ def main():
     ap.add_argument('--check', action='store_true')
     args = ap.parse_args()
     cfg = json.loads(Path(args.config).read_text())
-    if cfg.get('method_version') not in ('v0.83','v0.83a') or not cfg.get('direct_inputs'):
-        raise ValueError('This runner requires v0.83/v0.83a and direct_inputs=true')
+    if cfg.get('method_version') not in ('v0.83','v0.83a','v0.83b') or not cfg.get('direct_inputs'):
+        raise ValueError('This runner requires v0.83/v0.83a/v0.83b and direct_inputs=true')
     batch.validate_parallel_config(cfg)
     root = Path(cfg['output_root']).resolve()
     sources = [Path(cfg[k]).resolve() for k in ['raw_dir','mask_dir','soma_crop_dir','soma_seg_dir']]

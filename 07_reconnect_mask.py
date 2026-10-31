@@ -23,6 +23,11 @@ def prepare(spec, state, stage_run):
             stage_run('mask_'+letter,
                       [sys.executable,str(bootstrap.ROOT/'algorithms/mask_repair'/file)],expected)
             before=Path(spec['mask']) if index==0 else work/'abcdef'[index-1]/'connected-mask.tif'
+            if letter in ('c','f'):
+                unchanged=np.array_equal(tifffile.imread(before)>0,tifffile.imread(work/letter/'connected-mask.tif')>0)
+                if not unchanged:raise RuntimeError(f'v0.83b soma-disabled stage {letter} changed mask')
+                save_json(p['root']/'logs'/spec['id']/f'mask-{letter}-soma-disabled.json',
+                          dict(soma_completion_enabled=False,input_equals_output=True,added_voxels=0,removed_voxels=0))
             record_mask_step(spec,index,before,work/letter/'connected-mask.tif')
             if letter in ('b','d'):
                 from collections import Counter
@@ -50,7 +55,7 @@ def run(spec):
     after=work/'g/connected-mask.tif'
     mask_run.atomic_tiff(before,mask.astype('uint8')*255)
     target_bodies=[]
-    result,report=extend(raw,mask,xyz,p['soma_json'],p['soma_mask'],completed_somas=target_bodies)
+    result,report=extend(raw,mask,xyz,p['soma_json'],p['soma_mask'],completed_somas=target_bodies,complete_soma=False)
     from algorithms.mask_repair.soma_surface_guard import select_top, restrict, completed_bodies, restrict_per_soma, configuration
     original=tifffile.imread(spec['mask'])>0
     shape_report=json.loads((work/'f/report.json').read_text())
@@ -80,7 +85,7 @@ def run(spec):
     mask_run.atomic_tiff(after,result)
     record_mask_step(spec,6,before,after)
     mask_run.atomic_tiff(p['mask'],result)
-    report.update(root_geodesic_enabled=False,final_mask_step='g',
+    report.update(root_geodesic_enabled=False,soma_completion_enabled=False,final_mask_step='g',
                   original_preserved=bool(np.all(result[original]>0)),
                   removed_prior_repair_voxels=int(np.count_nonzero(mask&(result==0))),
                   total_added_to_original=int(np.count_nonzero((result>0)&~original)),

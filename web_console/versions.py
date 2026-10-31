@@ -7,6 +7,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 METHODS = {
+    'v0.83b': {'description':'保留神经突修复，取消c/f/g胞体体积补全；APP2支持骨架＋分割胞体。','label':'v0.83b · 无胞体补全','root':ROOT.parent/'v0.83b'},
     'v0.81': {'label':'v0.81 · 原版流程（无 Mask 修复）','root':ROOT.parent/'v0.81','engine':'legacy',
                'description':'原版 G-Cut 和剪枝；第 7 步直接使用合并 mask。'},
     'v0.82': {'label':'v0.82 · GSDT / 三维合并（无 Mask 修复）','root':ROOT.parent/'v0.82','engine':'legacy',
@@ -16,7 +17,7 @@ METHODS = {
     'v0.83': {'description':'原 XY MIP 引导的 Mask 修复及原版后处理。','label': 'v0.83 · 原 XY MIP', 'root': ROOT.parent / 'v0.83'},
     'v0.83a': {'description':'三方向、重叠、多厚度 MIP；根部测地线补全已停用，G-Cut 短末梢阈值 7.75 µm。','label': 'v0.83a · 三方向、重叠、多厚度 MIP', 'root': ROOT},
 }
-DEFAULT_METHOD = 'v0.83a'
+DEFAULT_METHOD = 'v0.83b'
 
 
 def method_root(version):

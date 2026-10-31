@@ -163,7 +163,13 @@ def restore_roots(raw,mask,previous_result=None,completed_somas=None):
 
 def main():
  work=Path(os.environ['RECONNECT_WORK']);raw=tifffile.imread(os.environ['RECONNECT_RAW']);mask=tifffile.imread(work/'e/connected-mask.tif')>0
- bodies=[];final,added,report=restore_roots(raw,mask,completed_somas=bodies);out=work/'f';out.mkdir(exist_ok=True)
+ # v0.83b: no root/body growth. Keep existing c evidence as ownership seeds.
+ from algorithms.mask_repair.soma_reference import existing_bodies
+ bodies=existing_bodies(tifffile.imread(work/'c/soma-only.tif')>0,mask)
+ final=mask.copy();added=np.zeros_like(mask)
+ report=dict(anchors=[],added_voxels=0,original_preserved=True,soma_completion_enabled=False,
+             reference_only=True,shape_rule='v083b-existing-soma-reference-only')
+ out=work/'f';out.mkdir(exist_ok=True)
  np.savez_compressed(out/'completed-somas.npz',**{f'body_{i}':b['points_zyx'].astype('int32') for i,b in enumerate(bodies)})
  report['completed_somas']=[{k:v for k,v in b.items() if k!='points_zyx'} for b in bodies]
  for name,v in [('connected-mask',final),('roots-added-only',added)]:tifffile.imwrite(out/(name+'.tif'),v.astype('uint8')*255,compression='zlib')

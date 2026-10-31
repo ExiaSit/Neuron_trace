@@ -111,12 +111,19 @@ def connect_roots(raw, mask, body, other_bodies=None):
         added[tuple(pts.T)]=True;used.add(e['source']);accepted.append({k:v for k,v in e.items() if k not in ['path_zyx','layers']})
     return mask|added,dict(accepted=accepted,rejections=audit,added_voxels=int(np.count_nonzero(added&~mask)))
 
-def extend(raw, mask, xyz=None, json_path=None, soma_path=None, completed_somas=None):
+def extend(raw, mask, xyz=None, json_path=None, soma_path=None, completed_somas=None, complete_soma=False):
     from .continuation_evidence import ContinuationEvidence
     evidence=ContinuationEvidence(raw);final=mask.copy();report=dict(soma={},traces=[],rejected={});target=None
     body=np.zeros_like(mask);neighbors=np.zeros_like(mask)
     if xyz is not None:
-        sl,b,other,rec=target_body(raw,xyz,json_path,soma_path);report['soma']=rec;body[sl]=b;neighbors[sl]=other;final|=body
+        if complete_soma:
+            sl,b,other,rec=target_body(raw,xyz,json_path,soma_path)
+        else:
+            from .soma_reference import segmented_target_reference
+            sl,b,other,rec=segmented_target_reference(mask,xyz,json_path,soma_path)
+        report['soma']=rec;body[sl]=b;neighbors[sl]=other
+        if complete_soma:final|=body
+        else:assert np.all(mask[body]),'Reference soma must not add foreground'
         if b.any() and completed_somas is not None:
             points=np.argwhere(b)+np.array([s.start for s in sl])
             completed_somas.append(dict(center_xyz=list(xyz),points_zyx=points,
