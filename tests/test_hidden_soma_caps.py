@@ -27,6 +27,31 @@ class HiddenSomaCapsTests(unittest.TestCase):
     def test_two_sided_bent_fiber_not_nominated(self):
         p=np.array([[20,30+i,40+abs(i)//3] for i in range(-12,13)])
         self.assertIsNone(self.geometry(points=p))
+    def folded_cap(self):
+        # Local skeleton around the missing soma connection in 25733: the
+        # longest inward walk folds into Z, while both arms face away from soma.
+        return np.array([[70,216,262],[70,217,262],[70,218,261],
+                         [70,219,260],[70,220,260],[70,221,260],
+                         [71,222,259],[71,223,259],[70,224,258],
+                         [70,225,258],[70,226,257],[71,227,257],
+                         [71,228,256],[72,229,256],[73,230,255],
+                         [74,231,256],[75,231,255],[76,230,255],
+                         [77,230,255],[78,230,255],[79,229,255],
+                         [80,229,255],[81,229,255],[82,229,255],
+                         [83,229,255],[84,228,255],[85,228,254],
+                         [86,228,254],[87,228,254],[88,228,254],
+                         [89,228,253]])
+    def test_folded_z_cap_can_face_a_nearby_soma_without_an_endpoint(self):
+        cap=self.geometry(points=self.folded_cap(),q=(69,238,252))
+        self.assertIsNotNone(cap)
+        self.assertEqual(cap['geometry_rule'],'short_gap_facing_cap')
+        self.assertGreater(cap['angle'],30)
+        self.assertEqual(cap['gap_facing_forward_fraction'],0)
+    def test_folded_cap_does_not_extend_short_gap_rule_to_distant_soma(self):
+        self.assertIsNone(self.geometry(points=self.folded_cap(),q=(65,252,246)))
+    def test_folded_cap_with_forward_fiber_is_not_a_termination(self):
+        points=np.vstack([self.folded_cap(),[[73,y,255] for y in range(232,244)]])
+        self.assertIsNone(self.geometry(points=points,q=(69,238,252)))
     def fixture(self):
         shape=(41,61,100);z,y,x=np.indices(shape)
         soma=(z-20)**2+(y-30)**2+(x-10)**2<=16

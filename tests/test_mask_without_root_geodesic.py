@@ -27,6 +27,15 @@ class NoRootGeodesicTests(unittest.TestCase):
                       vaa3d_app2='app2',vaa3d_resample='resample'))
         p=setup_config(spec)
         tifffile.imwrite(p['mask'],mask,photometric='minisblack')
+        # g consumes completed a-f references and bridge reports even when its
+        # growth function is mocked. Supply the same prerequisites as a real run.
+        work=root/'mask_steps/42'
+        for letter in ['b','d']:
+            save_json(work/letter/'report.json',dict(accepted=[]))
+        points=np.argwhere(mask>0)
+        save_json(work/'f/report.json',dict(completed_somas=[dict(
+            center_xyz=points.mean(0)[::-1].tolist(),top_z=1,source='existing_foreground')]))
+        np.savez_compressed(work/'f/completed-somas.npz',body_0=points)
         return spec,p,raw,mask>0
 
     def test_final_mask_is_g_and_removed_pass_cannot_be_reenabled_by_old_review_option(self):

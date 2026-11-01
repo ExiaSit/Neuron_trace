@@ -29,13 +29,27 @@ def cap_geometry(points, surface_tree, surface, known_tips=(), max_gap=70):
     if extent<8:return None
     direction=(q-p)/gap
     angle=float(np.degrees(np.arccos(np.clip(u@direction,-1,1))))
-    if angle>30:return None
     cloud=points[np.linalg.norm(points-p,axis=1)<=12]
     projection=(cloud-p)@u
     # A passing fiber has skeleton support on both sides of an interior point.
-    if len(cloud)<8 or np.mean(projection>2)>.05 or np.mean(projection< -4)<.35:return None
+    strict=(angle<=30 and len(cloud)>=8 and np.mean(projection>2)<=.05
+            and np.mean(projection< -4)>=.35)
+    rule='inward_segment_cap'
+    if not strict:
+        # A folded/looped cap can send the longest inward skeleton walk along Z
+        # instead of along the visible neurite. For a short gap only, also test
+        # the hemisphere facing the measured soma surface. Both skeleton arms
+        # must remain behind the cap; a passing fiber or sideways attachment
+        # must not become a candidate merely because it is close to a soma.
+        facing=(cloud-p)@direction
+        if (gap>18 or angle>60 or len(cloud)<12 or
+                np.mean(facing>2)>.05 or np.mean(facing< -4)<.35):return None
+        rule='short_gap_facing_cap'
     return dict(p=p,q=q,gap=gap,angle=angle,segment=segment,
-                forward_fraction=float(np.mean(projection>2)),extent=extent)
+                forward_fraction=float(np.mean(projection>2)),extent=extent,
+                geometry_rule=rule,
+                gap_facing_forward_fraction=float(np.mean(((cloud-p)@direction)>2)),
+                gap_facing_backward_fraction=float(np.mean(((cloud-p)@direction)< -4)))
 
 
 def strong_raw(result):
@@ -95,9 +109,15 @@ def recover_caps(raw, contrast, connected, original_labels, records, all_tips):
             short,why=evidence.path_evidence(raw,contrast,labels,p,end,source,target,'hidden_cap_to_segmented_soma')
             if not strong_raw(short):
                 rejected.append(dict(row,reason=why or 'hidden_cap_weak_prefix_raw'));continue
+            if cap['geometry_rule']=='short_gap_facing_cap' and any(
+                    e['transverse_ridge_fraction']<.95 for e in (full,short)):
+                rejected.append(dict(row,reason='short_facing_cap_weak_transverse_ridge'));continue
             short.update(soma_id=rec['soma_id'],source_angle=cap['angle'],small_undirected=False,
                          compact_soma_gap=cap['gap'],compact_soma_endpoint_zyx=q.tolist(),
                          full_route_evidence=full,cap_extent=cap['extent'],cap_forward_fraction=cap['forward_fraction'],
+                         cap_geometry_rule=cap['geometry_rule'],
+                         cap_gap_facing_forward_fraction=cap['gap_facing_forward_fraction'],
+                         cap_gap_facing_backward_fraction=cap['gap_facing_backward_fraction'],
                          original_source=a,original_target=rec['component'])
             best.setdefault(source,[]).append(short)
     proposals=[]
