@@ -46,15 +46,17 @@ for cid,box in enumerate(ndi.find_objects(labels),1):
  records.append(dict(component=cid,voxels=int(local.sum()),skeleton_voxels=int(s.sum()),direction_candidates=len(ts),geodesic_skeleton_fallback=fallback,endpoint_directions=[dict(point_zyx=p.tolist(),direction_zyx=u.tolist()) for p,u in ts]))
 tifffile.imwrite(O/'all-fragment-skeletons.tif',sk.astype('uint8')*255,compression='zlib')
 # Each Z plane has its own local background; do not use a full-volume MIP.
-f=raw.astype('float32');contrast=ndi.gaussian_filter(f,(0,.6,.6))-ndi.gaussian_filter(f,(0,4,4)); del f
-pairs=cKDTree([t[1] for t in tips]).query_pairs(70) if tips else set();best={};counts={}
+from algorithms.mask_repair.image_evidence_cache import raw_contrast
+contrast=raw_contrast(raw)
+from algorithms.mask_repair.endpoint_pairs import cross_component_pairs
+pairs=cross_component_pairs([t[1] for t in tips],[t[0] for t in tips],70);best={};counts={}
 def reject(reason):counts[reason]=counts.get(reason,0)+1
 progress_start=time.monotonic();progress_last=progress_start
-print(f'[a] endpoint pairs: {len(pairs):,}; begin 3-D validation',flush=True)
-for pair_number,(i,j) in enumerate(sorted(pairs),1):
+print(f'[a] endpoints: {len(tips):,}; stream inter-component pairs for 3-D validation',flush=True)
+for pair_number,(i,j) in enumerate(pairs,1):
  if pair_number%1000==0 and time.monotonic()-progress_last>=30:
   progress_last=time.monotonic()
-  print(f'[a] pairs {pair_number:,}/{len(pairs):,}; signal-supported groups {len(best)}; elapsed {progress_last-progress_start:.1f}s',flush=True)
+  print(f'[a] inter-component pairs {pair_number:,}; signal-supported groups {len(best)}; elapsed {progress_last-progress_start:.1f}s',flush=True)
  a,p,u=tips[i];b,q,w=tips[j]
  if a==b:continue
  d=q-p;gap=np.linalg.norm(d);d/=gap

@@ -96,7 +96,8 @@ def main():
     global RAW_CONTRAST,BACKMAP_STATS
     raw=tifffile.imread(RAW_PATH);mask=tifffile.imread(MASK_PATH)>0
     lab,n=ndi.label(mask,np.ones((3,3,3)));audit=json.loads((BASE/'report.json').read_text());records=audit['fragment_audit'];by={x['component']:x for x in records}
-    contrast=ndi.gaussian_filter(raw.astype('float32'),(0,.6,.6))-ndi.gaussian_filter(raw.astype('float32'),(0,4,4))
+    from algorithms.mask_repair.image_evidence_cache import raw_contrast
+    contrast=raw_contrast(raw)
     RAW_CONTRAST=contrast.copy()
     contrast,classes,mip,zmax,BACKMAP_STATS=backmap(raw,contrast)
     tifffile.imwrite(O/'xy-mip.tif',mip)

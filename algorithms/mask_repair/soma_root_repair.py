@@ -162,7 +162,7 @@ def restore_roots(raw,mask,previous_result=None,completed_somas=None):
  return final,added,dict(anchors=audit,added_voxels=int(added.sum()),rollback_voxels=rollback,components_before=n,components_after=n,original_preserved=True,shape_rule='core-referenced-3d-boundary-v1',strong_contrast_fraction=.5,edge_contrast_fraction=.35,plane_checks_diagnostic_only=True,limits='Core-referenced contrast with slice-local background/noise; whole 3D and lateral surface evidence, no per-plane clipping. Preserves stage-e mask. Voxel-space uint8 heuristic; ambiguous or blurred real roots may be withheld.')
 
 def main():
- work=Path(os.environ['RECONNECT_WORK']);raw=tifffile.imread(os.environ['RECONNECT_RAW']);mask=tifffile.imread(work/'e/connected-mask.tif')>0
+ work=Path(os.environ['RECONNECT_WORK']);mask=tifffile.imread(work/'e/connected-mask.tif')>0
  # v0.83b: no root/body growth. Keep existing c evidence as ownership seeds.
  from algorithms.mask_repair.soma_reference import existing_bodies
  bodies=existing_bodies(tifffile.imread(work/'c/soma-only.tif')>0,mask)

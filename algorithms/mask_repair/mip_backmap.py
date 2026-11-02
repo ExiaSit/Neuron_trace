@@ -40,12 +40,22 @@ def legacy_backmap(raw, contrast):
 
 
 def backmap(raw, contrast, config=None):
-    from .multiscale_mip import configuration, reinforce
+    import os
+    from .multiscale_mip import configuration
+    from .image_evidence_cache import cached_arrays
     cfg = configuration(config)
     if raw.ndim != 3 or raw.shape != contrast.shape or any(n == 0 for n in raw.shape):
         raise ValueError('MIP guidance requires matching nonempty 3-D volumes')
     if not np.isfinite(contrast).all():
         raise ValueError('Non-finite MIP contrast')
+    identity=dict(config=cfg,backend=os.environ.get('RECONNECT_COMPUTE_BACKEND','cpu'),
+                  minimum=os.environ.get('RECONNECT_GPU_MIN_VOXELS','262144'),
+                  slab_cuda=os.environ.get('RECONNECT_MIP_CUDA','1'))
+    return cached_arrays('backmap',[raw,contrast],identity,lambda:_backmap_uncached(raw,contrast,cfg))
+
+
+def _backmap_uncached(raw,contrast,cfg):
+    from .multiscale_mip import reinforce
     guide, classes, mip, zmax, stats = legacy_backmap(raw, contrast)
     stats['mode'] = cfg['mode']
     if cfg['mode'] == 'multiscale':

@@ -2,12 +2,30 @@
 from pathlib import Path
 import os
 import tempfile
+from functools import lru_cache
+from typing import NamedTuple
 import numpy as np
 
 # Retain the old eighth title for explicitly replaying historical h snapshots.
 MASK_TITLES = ['Skeleton and direction', 'Signal reconnect', 'Soma completion',
                'Soma-neurite reconnect', 'Connection thickness', 'Soma-root repair',
                'Guarded continuation', 'Root geodesic supplement']
+
+
+class _ProjectedRaw(NamedTuple):
+    shape: tuple
+    projections: tuple
+
+    def max(self, axis):
+        return self.projections[axis]
+
+
+@lru_cache(maxsize=1)
+def _raw_projections(path, size, mtime_ns):
+    """Retain only three small projections, not the full raw image per worker."""
+    import tifffile
+    raw=tifffile.imread(path)
+    return _ProjectedRaw(raw.shape,tuple(raw.max(axis) for axis in range(3)))
 
 
 def save_figure(fig, path):
@@ -46,14 +64,16 @@ def mask_transition(raw, before, after, path, title, sources=None, provenance='r
     for axis, plane in enumerate(['XY', 'XZ', 'YZ']):
         bg = raw.max(axis)
         vmax = max(25, float(np.percentile(bg, 99.5)))
-        for col, (mask, label) in enumerate([(before, 'Before'), (after, 'After'), (before, 'Changes')]):
+        projected_before=before.any(axis);projected_after=after.any(axis)
+        projected_added=added.any(axis);projected_removed=removed.any(axis)
+        for col, (projection, label) in enumerate([(projected_before, 'Before'), (projected_after, 'After'), (projected_before, 'Changes')]):
             ax = axes[axis, col]
             ax.imshow(bg, cmap='gray', vmin=0, vmax=vmax)
             rgba = np.zeros((*bg.shape, 4), dtype=np.float32)
-            rgba[mask.any(axis)] = [0, 1, 1, .55]
+            rgba[projection] = [0, 1, 1, .55]
             if col == 2:
-                rgba[added.any(axis)] = [1, .1, .05, .95]
-                rgba[removed.any(axis)] = [1, 1, 0, .95]
+                rgba[projected_added] = [1, .1, .05, .95]
+                rgba[projected_removed] = [1, 1, 0, .95]
             ax.imshow(rgba)
             ax.set_title(f'{plane} | {label}')
             ax.axis('off')
@@ -70,7 +90,9 @@ def record_mask_step(spec, index, before_path, after_path, provenance='recorded'
     import tifffile
     root = Path(spec['config']['output_root'])
     path = root/'mask_step_mips'/f'{spec["id"]}_{index+1:02d}_{"abcdefgh"[index]}.png'
-    return mask_transition(tifffile.imread(spec['raw']), tifffile.imread(before_path),
+    raw_path=Path(spec['raw']).resolve();stamp=raw_path.stat()
+    raw=_raw_projections(str(raw_path),stamp.st_size,stamp.st_mtime_ns)
+    return mask_transition(raw, tifffile.imread(before_path),
                            tifffile.imread(after_path), path, f'{spec["id"]} | {index+1:02d} {MASK_TITLES[index]}',
                            dict(before=str(before_path), after=str(after_path)), provenance)
 

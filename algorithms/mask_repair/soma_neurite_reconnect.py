@@ -41,14 +41,25 @@ def main():
  for cid,box in enumerate(ndi.find_objects(labels),1):
   local=labels[box]==cid;origin=np.array([s.start for s in box]);surf=np.argwhere(local&~ndi.binary_erosion(local))+origin;surfaces[cid]=surf;trees[cid]=cKDTree(surf)
   tips,skn=robust.tips_for(local,origin);all_tips[cid]=tips;audit.append(dict(component=cid,voxels=int(sizes[cid]),endpoint_direction_candidates=len(tips),skeleton_voxels=skn))
- c=ndi.gaussian_filter(raw.astype('float32'),(0,.6,.6))-ndi.gaussian_filter(raw.astype('float32'),(0,4,4));evidence.RAW_CONTRAST=c;guide,_,_,_,mapstats=backmap(raw,c)
+ from algorithms.mask_repair.image_evidence_cache import raw_contrast
+ c=raw_contrast(raw);evidence.RAW_CONTRAST=c;guide,_,_,_,mapstats=backmap(raw,c)
  rejected=[];best={}
+ from collections import OrderedDict
+ endpoint_cache=OrderedDict();cache_counts=dict(hits=0,misses=0)
+ use_endpoint_cache=os.environ.get('RECONNECT_ENDPOINT_CACHE','1')!='0'
  def evaluate(p,q,a,b,kind):
+  key=(tuple(p),tuple(q),a,b,kind)
+  if use_endpoint_cache and key in endpoint_cache:
+   cache_counts['hits']+=1;e,reason=endpoint_cache[key];endpoint_cache.move_to_end(key)
+   return (None if e is None else e.copy()),reason
+  cache_counts['misses']+=1
   e,reason=evidence.path_evidence(raw,guide,labels,p,q,a,b,kind)
   if reason:
    e,reason=evidence.path_evidence(raw,c,labels,p,q,a,b,kind)
    if e:e['route_source']='raw_fallback'
   elif e:e['route_source']='mip_guided'
+  if use_endpoint_cache:endpoint_cache[key]=(None if e is None else e.copy(),reason)
+  if len(endpoint_cache)>2048:endpoint_cache.popitem(last=False)
   return e,reason
  for rec in records:
   b=rec['component'];sid=rec['soma_id']
@@ -124,6 +135,7 @@ def main():
  report=dict(base=str(BASE/'connected-mask.tif'),components_before=n,components_after=n2,new_connections=len(accepted),new_voxels=int(added.sum()),accepted=accepted,somas=[{k:v for k,v in r.items() if k not in ['surface','tree']} for r in records],fragment_audit=audit,competition=competition,rejected=rejected,limits='Same-component internal gaps are skipped. Source direction 60 degrees; 70-voxel endpoint search (compact soma surface); 18-voxel small-fragment search. Voxel units, minimal bridge thickness; not biological validation.')
  report['hidden_caps']=cap_report
  report['backmap']=mapstats
+ report['endpoint_evidence_cache']=cache_counts
  (O/'report.json').write_text(json.dumps(report,indent=2));print(json.dumps({k:report[k] for k in ['components_before','components_after','new_connections','new_voxels']}),flush=True)
  for e in accepted:print(e['source'],'-> soma',e['soma_id'],'gap',round(e['gap'],1),'cost',round(e['cost'],3),flush=True)
 

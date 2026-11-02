@@ -74,6 +74,22 @@ when scattered by the caller. This does not assume an XY projection direction.
 
 
 def multiscale_seeds(raw, contrast, cfg):
+    eligible=(os.environ.get('RECONNECT_COMPUTE_BACKEND','cpu')=='cuda'
+              and os.environ.get('RECONNECT_MIP_CUDA','1')!='0'
+              and raw.dtype in (np.dtype('uint8'),np.dtype('uint16'))
+              and raw.size>=ndi.stats['minimum_gpu_voxels'] and not ndi.gpu_disabled)
+    if eligible:
+        from .multiscale_mip_cuda import seeds_cuda
+        try:return seeds_cuda(raw,contrast,cfg)
+        except Exception as exc:
+            if ndi.cp is None or not isinstance(exc,ndi.cp.cuda.memory.OutOfMemoryError):raise
+            ndi.gpu_disabled=True
+            ndi.stats.setdefault('cpu_fallbacks',[]).append(dict(operation='multiscale_mip_seeds',reason='cuda_out_of_memory'))
+            print('[GPU] Slab MIP allocation failed; continuing on CPU.',flush=True)
+    return multiscale_seeds_cpu(raw,contrast,cfg)
+
+
+def multiscale_seeds_cpu(raw, contrast, cfg):
     """Bounded memory: keep per-axis scale counts, never a stack of projections."""
     axis_support = np.zeros(raw.shape, np.uint8)
     records = []

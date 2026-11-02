@@ -593,6 +593,20 @@ completed-somas.npz真实胞体区域加2 µm余量作为保护；该档案缺�
 或与v0.81接近当作准确率证明。诊断结果保存在仓库外，不提交到Git。
 测试：python -m unittest tests.test_sheet_signal tests.test_signal_support。
 
+mask 修复计算优化（2026-11-03）
+  保持连接阈值、方向/信号判定与胞体不补全规则。
+  a/b/d 在同一样本工作目录缓存原图局部对比度，b/d 共享三方向叠层 MIP
+  引导证据。缓存键包含输入内容、形状、配置及实现摘要；不完整缓存重新计算，
+  正常流程结束随 mask_steps 清理，跨样本不共享。
+  CUDA 后端对 uint8/uint16 大体积执行叠层 argmax 和相邻列深度投票，保持
+  首个最大值、重叠窗口、各轴共识和阈值边界；沿用全局 GPU 串行锁，显存
+  不足回退 CPU。d 步缓存重复端点证据（上限2048项）；a 步流式生成跨连通域
+  候选对，保持原排序。诊断图仅缓存三张原图投影，避免重复读取和投影整幅图。
+  对照开关：RECONNECT_EVIDENCE_CACHE=0、RECONNECT_MIP_CUDA=0、
+  RECONNECT_ENDPOINT_CACHE=0 分别关闭证据缓存、叠层 CUDA、端点缓存。
+  测试：python -m unittest tests.test_mask_evidence_speed tests.test_multiscale_mip。
+  性能与回归记录保留在仓库外；小样本耗时受磁盘及并发任务影响。
+
 APP2 骨架化实验（默认关闭）
   app2_input_mode 默认 mask；设置 skeleton_soma 可仅对 APP2 输入执行三维 Lee
   骨架化，再加回胞体分割文件中目标坐标所在的连通区域。参考作者代码

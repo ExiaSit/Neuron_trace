@@ -86,7 +86,7 @@ def main():
     previous=tifffile.imread(WORK/'b/connected-mask.tif')>0
     soma,records=soma_volumes(raw)
     # Soma growth may fill a body but must not silently join existing fragments.
-    previous_labels,_=ndi.label(previous,np.ones((3,3,3)))
+    previous_labels,n0=ndi.label(previous,np.ones((3,3,3)))
     body_labels,_=ndi.label(soma,np.ones((3,3,3)))
     guarded=np.zeros_like(soma)
     for bid,box in enumerate(ndi.find_objects(body_labels),1):
@@ -103,7 +103,7 @@ def main():
     for rec in records:
         sl=tuple(slice(a,b) for a,b in rec['bbox_zyx']);local=soma[sl];rec['previous_coverage_fraction']=float(np.sum(local&previous[sl])/max(local.sum(),1));rec['new_voxels']=int(added[sl].sum())
     assert np.all(fixed[previous])
-    n0=ndi.label(previous,np.ones((3,3,3)))[1];n1=ndi.label(fixed,np.ones((3,3,3)))[1]
+    n1=n0  # fixed is an exact copy; no second/third full-volume labeling.
     for name,data in [('connected-mask',fixed),('soma-only',soma),('soma-added-only',added)]:tifffile.imwrite(O/(name+'.tif'),data.astype('uint8')*255,compression='zlib')
     report=dict(somas=records,rejected_candidates=REJECTIONS,new_soma_voxels=0,components_before=n0,components_after=n1,previous_mask_preserved=True,soma_completion_enabled=False,reference_only=True,limits='v0.83b: soma evidence restricted to incoming foreground; connected-mask is identical to stage b. No soma volume is added.')
     (O/'report.json').write_text(json.dumps(report,indent=2));print(json.dumps(report),flush=True)
