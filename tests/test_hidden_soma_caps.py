@@ -4,7 +4,7 @@ import numpy as np
 from scipy import ndimage as ndi
 from scipy.spatial import cKDTree
 from skimage.draw import line_nd
-from algorithms.mask_repair.hidden_soma_caps import cap_geometry,recover_caps,bridge_clear,clipped_target
+from algorithms.mask_repair.hidden_soma_caps import cap_geometry,recover_caps,bridge_clear,clipped_target,multiscale_facing_cap
 from algorithms.mask_repair import signal_reconnect as evidence
 from algorithms.mask_repair.soma_bridge import solid_bridge
 
@@ -52,6 +52,26 @@ class HiddenSomaCapsTests(unittest.TestCase):
     def test_folded_cap_with_forward_fiber_is_not_a_termination(self):
         points=np.vstack([self.folded_cap(),[[73,y,255] for y in range(232,244)]])
         self.assertIsNone(self.geometry(points=points,q=(69,238,252)))
+    def broad_folded_cap(self):
+        return np.array([[40+z,40-abs(z),40] for z in range(-24,25)])
+    def test_multiscale_distribution_recovers_a_folded_cap_over_18(self):
+        cap=self.geometry(points=self.broad_folded_cap(),q=(40,62,40))
+        self.assertEqual(cap['geometry_rule'],'multiscale_facing_cap')
+        self.assertEqual([r['radius'] for r in cap['multiscale_cap_evidence']],[12,24])
+    def test_multiscale_cap_does_not_extend_beyond_32(self):
+        self.assertIsNone(self.geometry(points=self.broad_folded_cap(),q=(40,73,40)))
+    def test_local_cap_cannot_hide_distal_passing_fiber(self):
+        p=self.broad_folded_cap()
+        passing=np.array([[40+z,40,40] for z in range(13,24)])
+        # A local patch can face the soma, while the larger neighborhood
+        # is dominated by a fiber running sideways: both scales must pass.
+        cloud=np.vstack([p,*[passing+[0,0,x] for x in range(-5,6)]])
+        self.assertIsNone(multiscale_facing_cap(cloud,np.array([40,40,40]),np.array([0,1,0]),22))
+    def test_multiscale_cap_requires_distal_extent(self):
+        self.assertIsNone(self.geometry(points=self.broad_folded_cap()[16:33],q=(40,62,40)))
+    def test_multiscale_cap_with_forward_continuation_is_rejected(self):
+        p=np.vstack([self.broad_folded_cap(),[[40,y,40] for y in range(41,51)]])
+        self.assertIsNone(multiscale_facing_cap(p,np.array([40,40,40]),np.array([0,1,0]),22))
     def fixture(self):
         shape=(41,61,100);z,y,x=np.indices(shape)
         soma=(z-20)**2+(y-30)**2+(x-10)**2<=16
@@ -61,6 +81,32 @@ class HiddenSomaCapsTests(unittest.TestCase):
         records=[dict(component=target,soma_id=1,surface=surf,tree=cKDTree(surf))]
         raw=(5+180*np.exp(-((z-20)**2+(y-30)**2)/2)).astype('float32')
         return raw,mask,lab,records,{source:[]}
+    def remote_component_fixture(self, source_z=140):
+        shape=(161,91,81);z,y,x=np.indices(shape)
+        target=(z-40)**2+(y-66)**2+(x-40)**2<=16
+        other=(z-source_z)**2+(y-16)**2+(x-40)**2<=16
+        mask=target|other;p=self.broad_folded_cap()
+        mask[tuple(p.T)]=True;mask[64:source_z+1,16,40]=True
+        lab,_=ndi.label(mask,np.ones((3,3,3)));source=int(lab[40,40,40])
+        records=[]
+        for sid,body in enumerate([target,other],1):
+            surf=np.argwhere(body&~ndi.binary_erosion(body))
+            records.append(dict(component=int(lab[tuple(surf[0])]),soma_id=sid,surface=surf,tree=cKDTree(surf)))
+        raw=(5+180*np.exp(-((z-40)**2+(x-40)**2)/2)).astype('float32')
+        return raw,mask,lab,records,{source:[]}
+    def test_remote_soma_component_can_supply_a_strong_facing_cap(self):
+        args=self.remote_component_fixture();added,accepted,audit=self.run_fixture(*args)
+        self.assertEqual(len(accepted),1)
+        self.assertEqual(accepted[0]['cap_geometry_rule'],'multiscale_facing_cap')
+        self.assertGreater(accepted[0]['remote_component_somas'][0]['distance'],70)
+        self.assertTrue((args[1]|added)[args[1]].all())
+    def test_nearby_soma_component_is_not_merged(self):
+        added,accepted,audit=self.run_fixture(*self.remote_component_fixture(70))
+        self.assertFalse(added.any())
+    def test_remote_component_still_requires_raw_gap_signal(self):
+        args=self.remote_component_fixture();args[0][:,47:54,:]=5
+        added,accepted,audit=self.run_fixture(*args)
+        self.assertFalse(added.any())
     def run_fixture(self,raw,mask,lab,records,tips):
         c=ndi.gaussian_filter(raw,(0,.6,.6))-ndi.gaussian_filter(raw,(0,4,4))
         with patch.object(evidence,'RAW_CONTRAST',c):return recover_caps(raw,c,mask,lab,records,tips)

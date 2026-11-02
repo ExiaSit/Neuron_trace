@@ -40,7 +40,6 @@ def main():
  all_tips={};surfaces={};trees={};audit=[]
  for cid,box in enumerate(ndi.find_objects(labels),1):
   local=labels[box]==cid;origin=np.array([s.start for s in box]);surf=np.argwhere(local&~ndi.binary_erosion(local))+origin;surfaces[cid]=surf;trees[cid]=cKDTree(surf)
-  if cid in soma_components:continue
   tips,skn=robust.tips_for(local,origin);all_tips[cid]=tips;audit.append(dict(component=cid,voxels=int(sizes[cid]),endpoint_direction_candidates=len(tips),skeleton_voxels=skn))
  c=ndi.gaussian_filter(raw.astype('float32'),(0,.6,.6))-ndi.gaussian_filter(raw.astype('float32'),(0,4,4));evidence.RAW_CONTRAST=c;guide,_,_,_,mapstats=backmap(raw,c)
  rejected=[];best={}
@@ -111,7 +110,16 @@ def main():
  connected=mask|added;lab2,n2=ndi.label(connected,np.ones((3,3,3)));assert n2==n-len(accepted);face=ndi.label(connected)[0]
  for e in accepted:
   p=np.asarray(e['path_zyx']);assert len(np.unique(face[tuple(p.T)]))==1
- soma_roots=[int(lab2[tuple(surfaces[cid][0])]) for cid in soma_components];assert len(set(soma_roots))==len(soma_roots)
+ # Soma components stay separate except for explicitly audited, raw-supported
+ # remote-component caps. Check final connectivity against accepted edges.
+ expected=list(range(n+1))
+ def group(i):
+  while expected[i]!=i:i=expected[i]
+  return i
+ for edge in accepted:expected[group(edge['source'])]=group(edge['target'])
+ soma_roots={cid:int(lab2[tuple(surfaces[cid][0])]) for cid in soma_components}
+ for a in soma_components:
+  for b in soma_components:assert (soma_roots[a]==soma_roots[b])==(group(a)==group(b))
  for name,a in [('connected-mask',connected),('new-soma-bridges-only',added)]:tifffile.imwrite(O/(name+'.tif'),a.astype('uint8')*255,compression='zlib')
  report=dict(base=str(BASE/'connected-mask.tif'),components_before=n,components_after=n2,new_connections=len(accepted),new_voxels=int(added.sum()),accepted=accepted,somas=[{k:v for k,v in r.items() if k not in ['surface','tree']} for r in records],fragment_audit=audit,competition=competition,rejected=rejected,limits='Same-component internal gaps are skipped. Source direction 60 degrees; 70-voxel endpoint search (compact soma surface); 18-voxel small-fragment search. Voxel units, minimal bridge thickness; not biological validation.')
  report['hidden_caps']=cap_report
