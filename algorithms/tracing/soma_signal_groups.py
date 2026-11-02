@@ -9,7 +9,54 @@ from skimage.graph import route_through_array
 from algorithms.tracing.signal_support import SignalEvidence
 
 
-def bridge(evidence, a, b):
+def extension_tube_evidence(evidence, path, body_radius):
+    """Require a dark transverse rim beyond the target core, excluding sheets."""
+    from algorithms.tracing.signal_support import resample_line
+    p=resample_line(path)
+    if len(p)<3:return None
+    t=np.gradient(p,axis=0);t/=np.maximum(np.linalg.norm(t,axis=1)[:,None],1e-8)
+    ref=np.tile([1.,0.,0.],(len(p),1));ref[np.abs(t[:,0])>.9]=[0,1,0]
+    u=np.cross(t,ref);u/=np.maximum(np.linalg.norm(u,axis=1)[:,None],1e-8);v=np.cross(t,u)
+    center=ndi.map_coordinates(evidence.smooth,p.T,order=1,mode='nearest')
+    rings=np.array([ndi.map_coordinates(evidence.smooth,
+        (p+8*(np.cos(a)*u+np.sin(a)*v)).T,order=1,mode='nearest')
+        for a in np.linspace(0,2*np.pi,16,endpoint=False)])
+    broad_ratio=np.max(np.minimum(rings[:8],rings[8:]),axis=0)/np.maximum(center,1.)
+    far=np.linalg.norm(p-p[0],axis=1)>body_radius
+    inside=np.all((p>=8)&(p<=np.array(evidence.raw.shape)-9),axis=1)
+    if far.sum()<5 or not inside[far].all():return None
+    fraction=float(np.mean((broad_ratio[far]<=.5)&(center[far]>=45)))
+    if fraction<.8:return None
+    return dict(radius_um=8.,samples=int(far.sum()),localized_fraction=fraction,
+                median_broad_ratio=float(np.median(broad_ratio[far])))
+
+
+def interior_core_bridge(distance, peaks, radii):
+    """Check the existing neck threshold on an actual interior 3-D route.
+
+    The shortest bright route can run along a body's surface. Its thin samples
+    are not a separating saddle if the two interior peaks remain connected
+    after erosion by 70% of the smaller body's radius. Bound the route length
+    to avoid a distant detour around a real narrow neck.
+    """
+    minimum_radius=.70*min(radii)
+    if min(radii)<2.:return None
+    a,b=np.asarray(peaks,int);gap=float(np.linalg.norm(a-b))
+    if gap<1:return None
+    allowed=distance>=minimum_radius
+    labels,_=ndi.label(allowed,np.ones((3,3,3)))
+    label=int(labels[tuple(a)])
+    if not label or labels[tuple(b)]!=label:return None
+    cost=np.where(labels==label,1.,np.inf)
+    path,total=route_through_array(cost,tuple(a),tuple(b),fully_connected=True)
+    if not np.isfinite(total) or total>1.8*gap:return None
+    path=np.asarray(path,int)
+    return dict(path_zyx=path.tolist(),length=float(total),gap=gap,
+                required_radius=float(minimum_radius),
+                minimum_radius=float(distance[tuple(path.T)].min()))
+
+
+def bridge(evidence, a, b, allow_target_extension=False):
     a=np.rint(a).astype(int);b=np.rint(b).astype(int)
     gap=float(np.linalg.norm(a-b))
     if gap<1:return None, 'duplicate_position'
@@ -54,24 +101,43 @@ def bridge(evidence, a, b):
     chord=np.rint(np.linspace(pa,pb,max(2,int(np.ceil(peak_gap*2))+1))).astype(int)
     chord_floor=float(core_distance[tuple(chord.T)].min())
     shared_core=bool(peak_gap<=min(endpoint_radii) and chord_floor>=.85*min(endpoint_radii) and min(endpoint_radii)>=2.)
-    if neck_ratio<.70 and not shared_core:return None,'independent_bulbs_with_narrow_neck'
+    interior=None
+    if neck_ratio<.70 and not shared_core:
+        # This exception is only for a small extension of the explicit target,
+        # never a general relaxation for two independently nominated bodies.
+        if (not allow_target_extension or gap>40 or endpoint_radii[1]>.55*endpoint_radii[0]
+                or np.any(np.minimum(a,b)<8) or np.any(np.maximum(a,b)>=np.array(evidence.raw.shape)-8)):
+            return None,'independent_bulbs_with_narrow_neck'
+        interior=interior_core_bridge(core_distance,endpoint_peaks,endpoint_radii)
+        if interior is None:return None,'independent_bulbs_with_narrow_neck'
+        core_values=v[tuple(np.asarray(interior['path_zyx']).T)]
+        if (core_values.min()<max(45.,.18*peak)
+                or np.percentile(core_values,10)<max(65.,.25*peak)):
+            return None,'independent_bulbs_with_narrow_neck'
+        interior['path_zyx']=(np.asarray(interior['path_zyx'])+lo).tolist()
+        tube=extension_tube_evidence(evidence,interior['path_zyx'],endpoint_radii[0])
+        if tube is None:return None,'independent_bulbs_with_narrow_neck'
+        interior['tube_evidence']=tube
     # Wide soma plateaus use a larger transverse ring, retaining a dark rim.
     good=np.logical_or.reduce([evidence.profile(p+lo,radius=r)['good'] for r in [4.,8.,12.,18.]])
     fraction=float(good.mean())
     if fraction<.8:return None,'diffuse_halo_or_plateau'
-    return dict(a_zyx=a.tolist(),b_zyx=b.tolist(),length=length,gap=gap,
+    record=dict(a_zyx=a.tolist(),b_zyx=b.tolist(),length=length,gap=gap,
                 minimum=minimum,q10=q10,width_q10=w10,ridge_fraction=fraction,
                 endpoint_radii=endpoint_radii,neck_radius=neck,neck_ratio=neck_ratio,
                 shared_core=shared_core,interior_peak_gap=peak_gap,interior_chord_floor=chord_floor,
-                path_zyx=(p+lo).tolist()),None
+                path_zyx=(p+lo).tolist())
+    if interior is not None:record['interior_core_bridge']=interior
+    return record,None
 
 
-def filter_seeds(raw, coords, target):
+def filter_seeds(raw, coords, target, protected_candidates=()):
     """Keep target as representative; no long transitive soma chains."""
     if target is None or len(coords)<2:return coords,dict(merged=[],rejected=[])
     ev=SignalEvidence(raw);target=np.asarray(target)
     order=sorted(range(len(coords)),key=lambda i:np.linalg.norm(np.asarray(coords[i])-target))
     kept=[];merged=[];rejected=[]
+    protected={tuple(c) for c in protected_candidates}
     for i in order:
         c=coords[i];representative=None
         for parent in kept:
@@ -80,7 +146,8 @@ def filter_seeds(raw, coords, target):
             # duplicate maxima in other somas may share a representative.
             if np.linalg.norm(np.asarray(parent)-target)>1 and d>20:continue
             if d>110:continue
-            record,reason=bridge(ev,parent,c)
+            record,reason=bridge(ev,parent,c,allow_target_extension=(
+                np.linalg.norm(np.asarray(parent)-target)<=1 and tuple(c) not in protected))
             if record is not None:
                 representative=parent;merged.append(dict(candidate_zyx=list(c),representative_zyx=list(parent),evidence=record));break
             rejected.append(dict(a_zyx=list(parent),b_zyx=list(c),reason=reason))

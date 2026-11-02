@@ -406,7 +406,14 @@ def process_image_to_gcut(img_path, mask_path, swc_path, vis_output_dir,
     NMS_RADIUS = 6.0 
     soma_coords = apply_nms(final_coords, final_scores, nms_radius=NMS_RADIUS)
     from algorithms.tracing.soma_signal_groups import filter_seeds
-    soma_coords,merge_audit=filter_seeds(img,soma_coords,target_coord)
+    independent_somas=[]
+    if soma_mask_ccs is not None and soma_mask_ccs.ndim==3:
+        for coord in soma_coords:
+            loc=np.rint(np.asarray(coord)-[z_min,y_min,x_min]).astype(int)
+            if np.all(loc>=0) and np.all(loc<np.array(soma_mask_ccs.shape)):
+                cc=int(soma_mask_ccs[tuple(loc)])
+                if cc and cc!=target_cc_id:independent_somas.append(coord)
+    soma_coords,merge_audit=filter_seeds(img,soma_coords,target_coord,protected_candidates=independent_somas)
     (Path(vis_output_dir)/'soma-merge-audit.json').write_text(json.dumps(merge_audit,indent=2,default=lambda v: v.item() if hasattr(v,'item') else str(v)))
     soma_radii={tuple(c):float(score) for c,score in zip(final_coords,final_scores)}
     audit_path=Path(vis_output_dir)/'soma-context.json'
@@ -435,6 +442,23 @@ def process_image_to_gcut(img_path, mask_path, swc_path, vis_output_dir,
                     tree, soma_coords,
                     is_3d=(img.ndim == 3), max_tolerance=12.0, radii=soma_radii
                 )
+                # A measured extension is a directional anchor of the target,
+                # not an independent soma competing for the same neurites.
+                from algorithms.tracing.soma_seed_ownership import validate_anchor_route,merge_anchor_assignments
+                target_matches=match_soma_nodes_in_swc(tree,[target_coord],max_tolerance=12.) if target_coord is not None else []
+                target_anchor=target_matches[0] if target_matches else None
+                anchor_ids=[];anchor_audit=[]
+                independent_ids=set(somata_ids)-{target_anchor}
+                for merged in merge_audit['merged']:
+                    ev=merged['evidence']
+                    if 'interior_core_bridge' not in ev or target_anchor is None:continue
+                    candidate=merged['candidate_zyx']
+                    matched=match_soma_nodes_in_swc(tree,[candidate],max_tolerance=12.,radii=soma_radii)
+                    if not matched:continue
+                    route=validate_anchor_route(tree,target_anchor,matched[0],independent_ids,ev)
+                    if route is not None and matched[0] not in anchor_ids:
+                        anchor_ids.append(matched[0]);anchor_audit.append(dict(route,candidate_zyx=candidate))
+                somata_ids+=anchor_ids
                 
                 if len(somata_ids) == 0:
                     log_messages.append("跳过: 所有候选坐标均未能在 15 像素内匹配到 App2 节点，疑似漏追。仅生成预处理图。")
@@ -452,6 +476,10 @@ def process_image_to_gcut(img_path, mask_path, swc_path, vis_output_dir,
                     if short_leaf_audit is not None:
                         (Path(vis_output_dir)/'short-leaf-audit.json').write_text(json.dumps(short_leaf_audit,indent=2))
                     segmentor.segment(conditional='human', cell_type='neocortex')
+                    ownership=merge_anchor_assignments(segmentor.knife,target_anchor,anchor_ids) if anchor_ids else []
+                    (Path(vis_output_dir)/'target-extension-ownership.json').write_text(json.dumps(
+                        dict(validated_anchors=anchor_audit,assignments=ownership,
+                             policy='verified tubular target extension; no foreign-owned neurites transferred'),indent=2))
                     gcut_neurons = segmentor.knife.assemble() 
                     
                     if target_coord is not None:

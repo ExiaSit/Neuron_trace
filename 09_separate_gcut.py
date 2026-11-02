@@ -27,6 +27,7 @@ def run(spec):
     result=mod.worker_task((p['raw'],p['mask'],p['app2'],vis,55.,5.,r/'logs'/f'{cid}_gcut_errors.log',p['soma_json'],p['soma_mask'],meta,p['selected'].parent))
     if (vis/'soma-merge-audit.json').exists():shutil.copy2(vis/'soma-merge-audit.json',r/'logs'/cid/'soma-merge-audit.json')
     if (vis/'soma-context.json').exists():shutil.copy2(vis/'soma-context.json',r/'logs'/cid/'soma-context.json')
+    if (vis/'target-extension-ownership.json').exists():shutil.copy2(vis/'target-extension-ownership.json',r/'logs'/cid/'target-extension-ownership.json')
     if (vis/'short-leaf-audit.json').is_file():
         from visualization.diagnostics import write_short_leaf_audit
         write_short_leaf_audit(json.loads((vis/'short-leaf-audit.json').read_text()),tifffile.imread(p['raw']),r,cid)

@@ -60,4 +60,40 @@ class SharedContextTests(unittest.TestCase):
   mask=np.zeros(raw.shape,bool);mask[:,:,0:15]=True
   self.assertTrue(prune_unsupported(tree,SignalEvidence(raw),points[0,::-1],protect_radius=1,protected_mask=mask)[1])
 
+class InteriorSaddleTests(unittest.TestCase):
+ def test_bright_surface_shortcut_does_not_split_a_thick_tail(self):
+  from algorithms.tracing.soma_signal_groups import bridge
+  z,y,x=np.indices((45,55,90))
+  body=(z-22)**2+(y-27)**2+(x-20)**2<=9**2
+  tube=((z-22)**2+(y-27)**2<=4**2)&(x>=20)&(x<=70)
+  raw=np.where(body|tube,140,3).astype('uint8')
+  raw[22,29,20:71]=255  # brighter surface attracts the old intensity route
+  a=[22,29,20];b=[22,29,55]
+  self.assertIsNone(bridge(SignalEvidence(raw),a,b)[0])
+  rec,reason=bridge(SignalEvidence(raw),a,b,allow_target_extension=True)
+  self.assertIsNone(reason);self.assertLess(rec['neck_ratio'],.70)
+  interior=rec['interior_core_bridge']
+  self.assertGreaterEqual(interior['minimum_radius'],interior['required_radius'])
+  self.assertEqual(filter_seeds(raw,[a,b],a)[0],[a])
+  self.assertEqual(filter_seeds(raw,[a,b],a,protected_candidates=[b])[0],[a,b])
+ def test_real_saddle_threshold_and_projection_overlap(self):
+  from algorithms.tracing.soma_signal_groups import interior_core_bridge
+  distance=np.zeros((5,5,12));distance[2,2,1:11]=2.8
+  peaks=[[2,2,1],[2,2,10]]
+  self.assertIsNotNone(interior_core_bridge(distance,peaks,[4.,4.]))
+  distance[2,2,5]=np.nextafter(2.8,0)
+  self.assertIsNone(interior_core_bridge(distance,peaks,[4.,4.]))
+  distance[:]=0;distance[1,2,1:11]=4;distance[3,2,1:11]=4
+  self.assertIsNone(interior_core_bridge(distance,[[1,2,1],[3,2,10]],[4.,4.]))
+ def test_long_detour_around_separate_bodies_is_rejected(self):
+  from algorithms.tracing.soma_signal_groups import interior_core_bridge
+  distance=np.zeros((3,25,12))
+  distance[1,1:23,1]=4;distance[1,1:23,10]=4;distance[1,22,1:11]=4
+  self.assertIsNone(interior_core_bridge(distance,[[1,1,1],[1,1,10]],[4.,4.]))
+ def test_sheet_cannot_support_a_target_extension(self):
+  from algorithms.tracing.soma_signal_groups import extension_tube_evidence
+  raw=np.full((45,55,90),3,dtype='uint8');raw[19:26,:,:]=180
+  path=[[22,27,x] for x in range(20,60)]
+  self.assertIsNone(extension_tube_evidence(SignalEvidence(raw),path,9.))
+
 if __name__=='__main__':unittest.main()
