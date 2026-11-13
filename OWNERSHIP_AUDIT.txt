@@ -1,0 +1,111 @@
+2026-11-12：默认剪枝已改为 tools/run_soma_branchwalk.py，从 soma 逐分叉检查前三段 branch。
+以下 ownership_audit 是历史实验说明，其基础规则/冲突门禁不在新默认入口执行。
+参见 README.txt 顶部及 prompts/soma_branchwalk_v1.txt。
+
+Gemma 原图优先连接审核（离线实验入口）
+
+输出仅写入 /data/disk/Neuron_tracing_method/test/0.84/runs/<run-name>/。
+输入必须是对应样本的模型介入前 v0.84 SWC，不能把已被 Gemma 剪过的结果当基线。
+基础剪枝不在本入口重跑；原来的 <7.75 µm 前置、局部连接、胞体清理/重连、
+其他胞体进入、近点合并和 Zigzag 的代码不变。
+
+本轮实测服务启动方式（需要当前端口空闲；不要重复启动已在使用的服务）：
+/data/disk/Neuron_tracing_method/test/0.84/runtime/start_gemma.sh \
+  --ctx-size 32768 --parallel 2 --reasoning-budget 512 \
+  --image-min-tokens 1120 --no-context-shift --verbose
+两个槽各 16384 上下文。原脚本仍提供 image-max-tokens=1120、batch=2048、
+mtmd-batch-max-tokens=1120。视觉网格取整后实际 token 数可能略超过 1120；
+查看原始日志和 vision_input_audit.json，不把参数上限当成实际编码数量。
+
+97117：
+/home/pzy/anaconda3/envs/hb_seg/bin/python \
+  /data/disk/Neuron_tracing_method/v0.84/tools/run_ownership_audit.py \
+  --cell 97117 \
+  --swc /data/disk/Neuron_tracing_method/test/0.84/runs/20261110_97117_current_v084_parallel/swc/97117.swc \
+  --history /data/disk/Neuron_tracing_method/test/0.84/runs/20261111_97117_global_soma_v3_checked \
+  --run-name 20261111_97117_raw_audit_v4 --workers 2
+首次独立复现应换新的 run-name；同目录只允许输入、模板、源码及运行身份一致的续跑。
+--limit N：只审核下一批 N 个未完成病例，不导出剪枝 SWC。
+--prepare-only：仅生成候选。--representative N：明确标为代表性子集，不冒充完整审核。
+--finalize-only：只对候选与联合复核均已完整落盘的结果重新导出。
+旧 run_soma_ownership_pipeline.py 带 --cell/--swc 会转交新入口；
+不带这两个参数的旧命令保留原 v3 行为用于历史复现。
+
+模型第一轮只收到局部原图、三方向连续切片和全局原图（J/A/B 定位标记）。
+匹配的假设叠加图保存在同一目录，补图请求或第二轮可以查看。
+每候选总共最多两次补图；可请求更大视野、更多切片、上游/竞争路线站点、
+胞体细节、沿路径展开或假设图。请求假设图同时增加新的上游原图信息。
+归属提示词：prompts/ownership_audit_v4.txt。
+复核提示词：prompts/attachment_review_v4.txt。
+每个实际发送文本、图片哈希、参数、原始响应均在 cases/<ID>/<phase>/roundN_*。
+第二轮不附第一轮结论；仍是同一模型复查，不是独立模型验证。
+
+候选来源只是送审线索，XY 相交、方向变化和图最短路不能直接触发删除。
+已知目标胞体来自逐样本元数据，检查图像边界、根位置和局部信号。
+人工确认路径目前为空；SWC 路径和图像骨架路径全部是待核实假设。
+输出分别记录 image_support、attachment_validity、target_ownership。
+other_soma_id 可以为空；连接可疑与身份归属是不同问题。
+边、候选、引用图片和坐标范围必须有效；完整性检查不证明生物学判断正确。
+
+执行前落盘 execution_plan.json：影响节点、分支、长度、范围内已有判断、
+胞体/未审分叉/冲突保护和重叠计划。保守策略会挂起存在 target 或未解决
+下游归属的子树。未知不等于目标真值，也不等于其他神经元。
+每个移出组件写 components/<ID>.swc，组件根 parent=-1；
+原父节点映射保存在对应 *_original_parents.json。不自动重连。
+
+报告生成：
+/home/pzy/anaconda3/envs/hb_seg/bin/python tools/report_ownership_audit.py \
+  --run <实验绝对路径> --server-log <实际 llama.cpp 日志>
+/home/pzy/anaconda3/envs/hb_seg/bin/python tools/build_audit_delivery.py \
+  --run <实验绝对路径> --browser-check
+入口 delivery.html：全部原图、实际请求/响应、动作和组件链接。
+report.html：整体与局部对照、两套提示词全文、冲突结果。
+模型调用累计秒数包含并发请求各自等待时间，不等于墙钟时间。
+
+未提供人工归属真值：准确率未评估。删除量、JSON 合法、SWC 拓扑合法均
+不能用作生物学准确率。实验结果需要在原图与逐层视图中继续检查。
+
+双方局部段复核与最终交付（v4_joint）
+
+原图审核完成后，还必须运行下面这一阶段才能把结果作为本轮最终输出：
+/home/pzy/anaconda3/envs/hb_seg/bin/python \
+  /data/disk/Neuron_tracing_method/v0.84/tools/refine_ownership_conflicts.py \
+  --parent-run /data/disk/Neuron_tracing_method/test/0.84/runs/20261111_97117_raw_audit_v4 \
+  --run-name 20261111_97117_raw_audit_v4_joint --max-segment-reviews 12
+
+它核对父实验的输入、元数据、实现、展开提示词和每张实际输入图片的哈希；
+核对引用的深度原图确实覆盖拟剪边的两个端点。既有 target 判断可被重新
+审核，每个冲突最多两段，总共最多 12 段，保留 before/after 和延后病例。
+每候选最多两次补图的预算跨初审、剪点复核、上游联合和下游段复核共享。
+旧边的复核不能授权新边；新结论不传播到未检查的下游。未解决的新冲突仍保留。
+
+最终 SWC 从原始模型介入前输入重算，不接着父实验 SWC 删枝。父实验输出是
+中间阶段，不能替代 *_joint 的最终审计。没有满足条件的剪断时也导出完整
+有效 SWC，并明确记录零动作，不为追求删除数量降低执行条件。
+
+最终报告命令：
+/home/pzy/anaconda3/envs/hb_seg/bin/python \
+  /data/disk/Neuron_tracing_method/v0.84/tools/report_ownership_joint.py \
+  --run <最终 *_joint 目录> --server-log <实际 llama.cpp 日志>
+/home/pzy/anaconda3/envs/hb_seg/bin/python \
+  /data/disk/Neuron_tracing_method/v0.84/tools/build_audit_delivery.py \
+  --run <最终 *_joint 目录> --browser-check
+
+model_request_refs.json 连接父实验与新阶段的不可变请求。所有实际发送的提示词、
+参数、图片及响应可从 delivery.html 打开。切片浏览器可定位父/子节点或
+目标/候选胞体；这是人工检查工具，不冒充额外的模型视觉输入。
+
+三样本复现配置与顺序驱动：
+/data/disk/Neuron_tracing_method/test/0.84/runs/20261111_gemma_audit_v4_runtime/suite_config.json
+/home/pzy/anaconda3/envs/hb_seg/bin/python \
+  /data/disk/Neuron_tracing_method/v0.84/tools/run_ownership_audit_suite.py --config <配置文件>
+配置中的 97117 要求上面的完整父实验已经结束；60003、89074 为各 8 个位置的
+代表性检查。独立重跑要更换配置里的 parent_run、final_run，并先运行新的 97117 父实验。
+最后运行 tools/validate_ownership_audit_suite.py --config <配置文件> 校验实际导出物。
+
+本次 97117 在推理结束后做过一次纯导出修复（未送审病例没有 reviews 字段）。
+原始推理 stage_identity.json 和 source/ 保留；修复版本在 export_source/，
+export_repair_identity.json 记录了仅 export 函数变化的 AST 校验。无需重跑模型。
+已有该修复标记的目录，suite 驱动会改用 finish_ownership_export.py --run <目录>；
+该命令仍检查所有提示词、实际图像、模型/运行配置和推理代码的一致性。
+如果推理部分发生变化，必须新建 run-name，不能以导出修复绕过指纹校验。

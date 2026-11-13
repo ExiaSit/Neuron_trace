@@ -1,0 +1,128 @@
+v0.84：当前 Gemma 胞体审核流程的入口、出口与耗时（2026-11-13）
+
+1. 当前入口与执行范围
+
+当前使用的是独立的胞体实验工具链，还没有把 Gemma 胞体审核自动接入
+run_pipeline.py 或网页任务的默认执行路径。
+常规全流程入口仍为 run.sh / run_pipeline.py；其输出由 config.json 的
+output_root 决定。下面的实验工具则使用独立的 test/0.84 目录。
+
+A. tools/run_gemma_soma_seeds.py
+   原图 + 分割 mask + 已知目标元数据 -> GSDT 两档候选并集 -> Gemma 审核。
+   该入口只审核胞体，不执行 G-Cut 和剪枝。
+   主结果：<seed-run>/soma_catalogue.json、summary.json、cases/、index.html。
+   实际发送提示词、图片清单、响应、坐标映射都在 cases/<candidate_id>/ 中。
+
+B. tools/finish_gemma_soma_seed_review.py
+   审核完成后导出 normalized/soma_catalogue.json 和 normalized/index.html。
+   下游入口实际读取的是 normalized/soma_catalogue.json。
+   REVIEW 不加入种子；已知目标 T 必须保留；显示半径不用于计算。
+
+C. tools/run_gemma_seed_downstream.py
+   审核胞体目录 + 同一份冻结 APP2/raw/mask -> 两组 G-Cut -> 重采样 ->
+   已恢复的基础剪枝 -> SWC 结构及输入完整性检查。
+   legacy_seeds 为原胞体流程，gemma_seeds 为 Gemma 审核保留点。
+   不重跑 nnU-Net、APP2，不在这个入口再次调用 Gemma。
+
+D. tools/report_gemma_seed_downstream.py / tools/compare_soma_seed_markers.py
+   生成新旧 SWC 对照、局部原图、Vaa3D 文件、胞体差异图和 marker。
+   tools/report_soma_seed_suite.py 是已完成四样本批次的汇总工具，含该轮
+   具体目录与结果说明，不是任意输入的通用调度入口。
+
+2. 当前输入
+
+根目录：/data/disk/Neuron_tracing_method/test/0.84/data/
+  inputs/raw/<id>.tif                         1 µm 原图
+  source_v083b/mask/<id>.tif                   冻结分割 mask
+  source_v083b/trace_app2/down_sampled_swcs_app2/<id>.swc
+                                              冻结 APP2
+  metadata/<id>.json                          已知目标胞体及尺度
+  metadata.json                              60003 的元数据回退文件
+  inputs/soma_img/<id>.json                   胞体裁剪位置
+  inputs/soma_seg/<id>.tif                     胞体分割
+  provenance/<id>/run-config.json             后续配置
+  provenance/job-config.json                 60003 的配置回退文件
+
+单独审核入口支持 --cell、--raw、--mask、--run-name、--endpoint；其余
+关联数据按上述目录查找。现阶段不是只给任意 TIFF 就能完成的通用入口。
+
+模型服务：Gemma 4 31B 官方 QAT 四位，现有 llama.cpp。
+模型别名：gemma4-31b-local
+API：http://127.0.0.1:18484/v1/chat/completions
+部署脚本：/data/disk/Neuron_tracing_method/test/0.84/runtime/start_gemma.sh
+运行环境：/home/pzy/anaconda3/envs/hb_seg/bin/python
+本轮参数：ctx-size=16384，parallel=1，n-gpu-layers=54，batch/ubatch=1280，
+threads=16，reasoning-budget=256，image-min-tokens=1120，no-context-shift。
+其余参数、权重/视觉编码文件哈希以各 seed-run/runtime.json 为准。
+该批次结束后，临时启动的模型服务已停止以释放显存。
+模型权重、运行环境、输入图像和实验结果不存入 Git。
+
+3. 运行示例（在 v0.84 目录，Gemma 服务已启动；每次用新 run-name）
+
+PY=/home/pzy/anaconda3/envs/hb_seg/bin/python
+BASE=/data/disk/Neuron_tracing_method/test/0.84
+export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
+export RECONNECT_COMPUTE_BACKEND=cpu MPLCONFIGDIR=/tmp/neuron_soma_mpl
+
+$PY tools/run_gemma_soma_seeds.py --cell 97117 --run-name demo_97117_seed
+$PY tools/finish_gemma_soma_seed_review.py "$BASE/runs/demo_97117_seed"
+$PY tools/run_gemma_seed_downstream.py --seed-run "$BASE/runs/demo_97117_seed" --run-name demo_97117_downstream --render-workers 4
+$PY tools/report_gemma_seed_downstream.py "$BASE/runs/demo_97117_downstream"
+$PY tools/compare_soma_seed_markers.py "$BASE/runs/demo_97117_downstream"
+
+模型输入审计：将该样本实际请求对应的服务器日志段保存为
+<seed-run>/server.log，再运行 tools/validate_gemma_soma_seed_run.py <seed-run>。
+共用服务时要记录每个样本的日志字节范围，不能把多个样本的整份日志
+冒充单个样本日志。缓存复用时必须保留原始编码日志；输入、提示词、
+视图或运行配置变化应使用新目录，不能继续套用旧判断。
+
+4. 当前出口
+
+统一根目录：/data/disk/Neuron_tracing_method/test/0.84/runs/
+  <seed-run>/normalized/soma_catalogue.json    被后续实际读取的胞体集合
+  <downstream-run>/gemma_seeds/pruning_swcs/<id>.swc
+                                              新方法最终目标 SWC
+  <downstream-run>/legacy_seeds/pruning_swcs/<id>.swc
+                                              相同输入的旧种子对照
+  <downstream-run>/<arm>/gcut_output/<id>/     所有 G-Cut 分配组件和匹配审计
+  <downstream-run>/soma_comparison/            新旧/叠加/仅旧/仅新等 marker
+  <downstream-run>/vaa3d/                     配套原图及显示 SWC
+  <downstream-run>/index.html                 整体和局部对照
+
+普通 marker 使用 XYZ+1，配套 .v3draw；*_for_tiff.marker 为校准后的 TIFF
+Y 翻转版本，不能混用。显示半径 8 µm（直径 16 µm）不参与 G-Cut 计算。
+“仅旧/仅新”表示 6 µm 一对一空间配对后未对应，不代表生物学胞体增减。
+旧流程还含辅助提名；旧点不一定被 Gemma 审核过，不能把所有仅旧点称为
+模型拒绝。每个旧点附近真正送审的候选可在 spatial_correspondence.json 查到。
+
+本轮总报告：runs/20261113_multi_soma_suite/index.html
+单样本：runs/20261113_<id>_gemma_soma_seed_suite/
+        runs/20261113_<id>_gemma_soma_downstream_suite/
+批次专用运行、组件导出和交付校验脚本保存在总报告所在实验目录。
+这些实验目录留在服务器，不随代码提交；相应输入和输出均有版本/哈希记录。
+
+5. 本轮实测耗时（四个样本，单位：分钟）
+
+ID       候选  Gemma请求合计  新组后处理  两项合计  加旧组对照后的计时合计
+60003     70      36.21         0.80       37.02          39.35
+89074     92      44.55         7.19       51.74          61.45
+97117     34      16.11         4.34       20.45          26.03
+106245    42      19.85         2.69       22.53          26.48
+平均             29.18         3.76       32.94          38.33
+
+238 个候选加权平均每次 Gemma 请求 29.42 秒；每次输入 3 张图。
+Gemma 请求耗时读取 seed-run/summary.json 的 model_seconds，含 HTTP 调用、
+响应保存及解析；不含请求前候选生成、图片渲染、模型文件哈希等准备工作。
+新组后处理读取 gemma_seeds/complete.json 的 seconds，包括 G-Cut、重采样、
+基础剪枝及其诊断图、guard。最终对照报告、marker、压缩包制作不在该计时中。
+因此 32.94/38.33 分钟是已记录阶段的合计，不是完整端到端平均墙钟时间。
+批次还将下一样本模型审核与上一样本 CPU 后处理重叠执行，不能将这张表
+简单相加当作批次墙钟时间。GPU/CPU 共享负载会影响速度。
+
+6. 结果解释
+
+54 项针对性测试通过，238 次请求 / 714 张图的工程审计通过。
+无人工胞体或连接真值，生物学准确率未评估。
+106245 的最终节点 4533 -> 918，既受 G-Cut 分配影响，也受随后既有局部
+剪枝影响；其中一处启发式剪断影响 2316 节点，记录不是已证实信号断裂。
+不能把这一删除量归为 Gemma 已确认正确的分支归属判断。

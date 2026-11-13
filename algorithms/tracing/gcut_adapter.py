@@ -1,6 +1,6 @@
 """Bounded soma contraction and terminal pruning by 3-D path length.
 
-Current pipeline runs terminal pruning last, after all downstream pruning.
+Current pipeline runs terminal pruning first in stage 11, before connection diagnostics.
 G-Cut retains an explicit legacy replay option for historical diagnostics.
 Coordinates are 1-um image XYZ. Include the attachment edge to the surviving
 branch point or soma in each terminal path's length; protect known somas.
@@ -120,7 +120,7 @@ def make_segmentor(swc_path,soma_file_path,min_leaf_length_um=None):
     segmentor.tree_nodes,segmentor.soma_ids=segmentor.handy_man.results()
     segmentor.knife=GCut()
     if min_leaf_length_um is None:
-        print('G-Cut: terminal length pruning deferred to the final pruning stage', flush=True)
+        print('G-Cut: terminal length pruning deferred to the SWC pruning stage', flush=True)
     else:
         print(f'Historical replay: short terminals <{min_leaf_length_um:g} um removed before G-Cut', flush=True)
     return segmentor

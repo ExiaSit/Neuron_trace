@@ -31,7 +31,7 @@
   ],
   "app2_temp_dir": "/tmp/neuron-app2-v083",
   "baseline_root": null,
-  "method_revision": "no-soma-volume-completion-20261101",
+  "method_revision": "base-pruning-restored-gemma-soma-seeds-20261112",
   "validated_baseline_registry": null,
   "input_mode": "v3d",
   "neuron_ids": [],

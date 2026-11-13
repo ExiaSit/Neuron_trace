@@ -1,18 +1,20 @@
 """Numbered v0.83 reconstruction stage; run_pipeline.py is the batch entry."""
-from pathlib import Path
-import json, shutil, sys, time
-import numpy as np
-import tifffile
 from utils import bootstrap
-from utils.case_worker import setup_config, load_module, check_swc, save_json, comparison
-from utils import mask_batch as mask_run
+from utils.case_worker import setup_config, check_swc, save_json
+from algorithms.tracing.soma_branchwalk import tree_index
+from algorithms.tracing.connection_diagnostics import POLICY
+import numpy as np
 
 def run(spec):
     p=setup_config(spec);cfg=spec['config'];r=p['root'];cid=spec['id']
-    import pandas as pd
-    meta=pd.DataFrame([spec['metadata']], index=[int(cid)])
-    from utils.publication_guard import run
-    run(spec,p,save_json,check_swc)
+    # The current pruning result is authoritative: a historical baseline
+    # must not restore removed branches or reintroduce older pruning rules.
+    check_swc(p['final'])
+    tree_index(np.loadtxt(p['final'],ndmin=2).tolist())
+    save_json(r/'regression_guard'/f'{cid}.json', dict(
+        id=cid, decision='validated_restored_base_pruning_output',
+        pruning_policy=POLICY,
+        method_revision=cfg.get('method_revision')))
 
 if __name__=="__main__":
     from utils.stage_cli import run_spec

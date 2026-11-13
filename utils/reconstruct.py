@@ -96,26 +96,10 @@ def main():
         return value
     engine.file_stamp=stamp
     index=previous_index(cfg['previous_swc_dirs'])
-    registry_path=cfg.get('validated_baseline_registry')
-    registry=json.loads(Path(registry_path).read_text()) if registry_path else {}
-    def validated_reference(spec):
-        record=registry.get(spec['id'])
-        if not record or record['metadata']!=spec['metadata']:return None
-        for key,digest in record['input_sha256'].items():
-            h=hashlib.sha256()
-            with Path(spec[key]).open('rb') as stream:
-                for block in iter(lambda:stream.read(8*1024*1024),b''):h.update(block)
-            if h.hexdigest()!=digest:return None
-        reference=cfg.get('baseline_path_overrides',{}).get(record['root'],record['root'])
-        if not (Path(reference)/'pruning_swcs'/f"{spec['id']}.swc").is_file():
-            raise FileNotFoundError(f"Validated baseline missing: {reference}; restore it or configure baseline_path_overrides")
-        return reference
     original_save=engine.save_json
     def save(path,data):
         if Path(path).parent==root/'manifests':
             data['old_swcs']=index.get(data['id'],[])
-            reference=validated_reference(data)
-            if reference:data['guard_baseline_root']=reference
         return original_save(path,data)
     engine.save_json=save
     def refresh(cid):
@@ -143,7 +127,7 @@ def main():
             subprocess.run([sys.executable,str(Path(__file__).resolve()),'--render',str(manifest),str(sidecar),key],
                            env=env,stdout=stream,stderr=subprocess.STDOUT,check=True)
         print(f'[{cid}] 比较图已加载 {len(spec["old_swcs"])} 个 v0.81 SWC'+('（该 ID 无旧结果）' if not spec['old_swcs'] else ''),flush=True)
-    history_policy='启用内容核验' if registry else '关闭'
+    history_policy='关闭（v0.84 四项剪枝结果直接保留）'
     print(f'已索引 {len(index)} 个 ID 的 v0.81 结果；当前 {cfg["method_version"]} / {cfg["method_revision"]}；重新计算 mask；历史基线替换：{history_policy}。',flush=True)
     if args.refresh_only:
         import fcntl

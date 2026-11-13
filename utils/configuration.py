@@ -18,7 +18,8 @@ def load_config(path):
     for model in cfg.get('models',{}).values():
         model['results']=absolute(model['results'])
     cfg.setdefault('method_version','v0.83a')
-    cfg.setdefault('method_revision','multiaxis-overlapping-mip-no-root-geodesic-20261026')
+    cfg.setdefault('method_revision','base-pruning-restored-gemma-soma-seeds-20261112')
+    cfg.setdefault('gemma_endpoint','http://127.0.0.1:18484')
     from algorithms.mask_repair.multiscale_mip import configuration
     cfg['mask_mip']=configuration(cfg.get('mask_mip', {}))
     cfg['direct_inputs']=True

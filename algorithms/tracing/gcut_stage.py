@@ -258,12 +258,23 @@ from visualization.gcut_summary import save_comprehensive_summary
 # =========================================================================
 def process_image_to_gcut(img_path, mask_path, swc_path, vis_output_dir, 
                           target_coord=None, percentile_value=50.0, gsdt_threshold=5.0,
-                          soma_json_path=None, soma_mask_path=None):
+                          soma_json_path=None, soma_mask_path=None,
+                          seed_review=None, relaxed_seed_threshold=4.0, soma_seed_override=None):
+    """seed_review callback selects a diagnostics-only path; never runs G-Cut/pruning."""
+    if seed_review is not None and soma_seed_override is not None:
+        raise ValueError('Choose diagnosis-only review or supplied seeds, not both')
+    if soma_seed_override is not None:
+        return process_with_supplied_seeds(img_path, mask_path, swc_path, vis_output_dir,
+                                          target_coord, percentile_value, gsdt_threshold, soma_seed_override)
     img_path_str = str(img_path)
     log_messages = []
     
     img = tifffile.imread(img_path_str)
     mask = tifffile.imread(mask_path)
+    if seed_review is not None:
+        from algorithms.tracing.gemma_soma_seeds import candidates
+        bundle=candidates(img,mask,target_coord,gsdt_threshold,relaxed_seed_threshold,percentile_value)
+        return seed_review(img,bundle)
     intensity_threshold = get_binarization_threshold(img, mask, percentile_value)
     if intensity_threshold is None:
         return None, "失败: Mask 中没有任何有效区域"
@@ -420,6 +431,40 @@ def process_image_to_gcut(img_path, mask_path, swc_path, vis_output_dir,
     audit_path.write_text(json.dumps(dict(target_zyx=list(map(float,target_coord)) if target_coord is not None else None,centers_zyx=soma_coords,radii=[soma_radii[tuple(c)] if np.isfinite(soma_radii[tuple(c)]) else None for c in soma_coords]),indent=2))
     # =========================================================================
 
+    return _finish_gcut(img_path, swc_path, vis_output_dir, img, target_coord,
+                        soma_coords, soma_radii, merge_audit, intensity_threshold,
+                        binary_img, dist_transform, gsdt_mask, global_soma_mask,
+                        final_coords, NMS_RADIUS)
+
+
+def process_with_supplied_seeds(img_path, mask_path, swc_path, vis_output_dir,
+                                target_coord, percentile_value, gsdt_threshold, context):
+    from algorithms.tracing.soma_seed_integration import validate_context
+    img = tifffile.imread(img_path)
+    mask = tifffile.imread(mask_path)
+    coords, radii, ids = validate_context(context, img.shape, target_coord)
+    threshold = get_binarization_threshold(img, mask, percentile_value)
+    if threshold is None:
+        raise ValueError('Empty mask')
+    binary = img > threshold
+    distance = ndimage.distance_transform_edt(binary)
+    out = Path(vis_output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    # Preserve the reviewed list; no NMS, auxiliary proposals, mask suppression,
+    # or filter_seeds merging may change it before matching to APP2 nodes.
+    merge = dict(merged=[], policy='supplied reviewed seeds; no automatic seed merging')
+    (out/'soma-merge-audit.json').write_text(json.dumps(merge, indent=2))
+    (out/'soma-context.json').write_text(json.dumps(context, indent=2))
+    return _finish_gcut(Path(img_path), swc_path, vis_output_dir, img, target_coord,
+                        coords, radii, merge, threshold, binary, distance,
+                        distance > gsdt_threshold, np.zeros_like(img), coords, 0., seed_ids=ids)
+
+
+def _finish_gcut(img_path, swc_path, vis_output_dir, img, target_coord,
+                 soma_coords, soma_radii, merge_audit, intensity_threshold,
+                 binary_img, dist_transform, gsdt_mask, global_soma_mask,
+                 final_coords, NMS_RADIUS, seed_ids=None):
+    log_messages = []
     short_leaf_audit = None
     app2_tree = None
     split_trees = {}
@@ -442,11 +487,16 @@ def process_image_to_gcut(img_path, mask_path, swc_path, vis_output_dir,
                     tree, soma_coords,
                     is_3d=(img.ndim == 3), max_tolerance=12.0, radii=soma_radii
                 )
+                from algorithms.tracing.soma_seed_integration import matching_audit
+                seed_matches = matching_audit(tree, soma_coords, soma_radii, seed_ids)
+                (Path(vis_output_dir)/'seed-matching.json').write_text(json.dumps(seed_matches, indent=2))
                 # A measured extension is a directional anchor of the target,
                 # not an independent soma competing for the same neurites.
                 from algorithms.tracing.soma_seed_ownership import validate_anchor_route,merge_anchor_assignments
                 target_matches=match_soma_nodes_in_swc(tree,[target_coord],max_tolerance=12.) if target_coord is not None else []
                 target_anchor=target_matches[0] if target_matches else None
+                if seed_ids is not None and (target_anchor is None or target_anchor not in somata_ids):
+                    raise ValueError('Known target soma has no valid APP2 match')
                 anchor_ids=[];anchor_audit=[]
                 independent_ids=set(somata_ids)-{target_anchor}
                 for merged in merge_audit['merged']:
@@ -496,6 +546,15 @@ def process_image_to_gcut(img_path, mask_path, swc_path, vis_output_dir,
                                     min_dist = dist
                                     target_soma_id = sid
 
+                    if seed_ids is not None:
+                        if target_anchor not in gcut_neurons:
+                            raise ValueError('Known target anchor lost during G-Cut preprocessing')
+                        target_soma_id = target_anchor
+                    (Path(vis_output_dir)/'gcut-seed-survival.json').write_text(json.dumps(dict(
+                        matched_ids=list(map(int, somata_ids)),
+                        preprocessed_soma_ids=list(map(int, segmentor.soma_ids)),
+                        assembled_soma_ids=list(map(int, gcut_neurons)),
+                        target_soma_id=int(target_soma_id) if target_soma_id is not None else None), indent=2))
                     for soma_id, neuron_tree_obj in gcut_neurons.items():
                         single_tree_list = []
                         for node_id, node in neuron_tree_obj.tree.items():
@@ -533,6 +592,7 @@ def process_image_to_gcut(img_path, mask_path, swc_path, vis_output_dir,
         app2_tree, split_trees, target_soma_id,
         combined_vis_path, nms_radius=NMS_RADIUS, title_prefix=img_path.name,
         short_leaf_audit=short_leaf_audit,
+        seed_selection_label='Gemma reviewed (no NMS)' if seed_ids is not None else None,
         individual_output_dir=Path(vis_output_dir) / (img_path.stem + "_panels")
     )
 

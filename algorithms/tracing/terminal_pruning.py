@@ -1,4 +1,4 @@
-"""Length-based terminal removal on the final, soma-reconnected SWC tree."""
+"""Length-based terminal removal with explicit initial/final audit stages."""
 from algorithms.tracing.gcut_adapter import (
     SHORT_LEAF_MIN_LENGTH_UM, prune_short_leaves_by_length,
 )
@@ -29,3 +29,10 @@ def prune_final_short_leaves(nodes, min_length_um=SHORT_LEAF_MIN_LENGTH_UM):
         rule='iterative terminal path length; attachment node and somas protected',
     )
     return after, audit
+
+
+def prune_initial_short_leaves(nodes, min_length_um=SHORT_LEAF_MIN_LENGTH_UM):
+    """Same physical-length rule, applied before every other pruning operation."""
+    kept, audit = prune_final_short_leaves(nodes, min_length_um)
+    audit.update(stage='initial_pruning', capture_point='before soma cleanup and connection diagnosis')
+    return kept, audit

@@ -34,7 +34,7 @@
     "/media/pzy/U-Disk2/human_reconstruction/1um_img/img": "/media/pzy/U-Disk2/human_reconstruction/1um_img"
   },
   "baseline_root": null,
-  "method_revision": "multiaxis-overlapping-mip-20261025",
+  "method_revision": "base-pruning-restored-gemma-soma-seeds-20261112",
   "validated_baseline_registry": null,
   "input_mode": "prepared",
   "previous_app2_dirs": [

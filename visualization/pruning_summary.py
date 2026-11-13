@@ -28,9 +28,9 @@ def save_pruning_summary(show_steps, viz_buffer, raw_image, morph, sphere_zradiu
         ("step03_graph_traversed", "Step 3: Graph Traversed"), 
         ("step04_binary_mask", "Step 4: Binary Mask"),
         ("step05_soma_mask", "Step 5: Soma Mask"),
-        ("step06_connectivity_check", "Step 6: Roots Check"),
+        ("step06_retained_roots", "Step 6: Retained Roots"),
         ("step07_new_connections", "Step 7: New Connections"),
-        ("step08_sharp_bends", "Step 8: Z-Bends Pruning"),
+        ("step08_geometry_cleanup", "Step 8: Merge / Zigzag"),
         ("step09_final_result", "Step 9: Final Result"),
     ]
 

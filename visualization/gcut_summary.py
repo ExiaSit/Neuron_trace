@@ -8,7 +8,8 @@ import matplotlib.patches as patches
 
 def save_comprehensive_summary(img, binary_img, dist_transform, gsdt_mask, global_soma_mask, pre_nms_coords, post_nms_coords, 
                                app2_tree, split_trees, target_soma_id, 
-                               save_path, nms_radius=20.0, title_prefix="", individual_output_dir=None, short_leaf_audit=None):
+                               save_path, nms_radius=20.0, title_prefix="", individual_output_dir=None, short_leaf_audit=None,
+                               seed_selection_label=None):
     """
     生成 2x4 的网格图。
     排列顺序呈左开口的U形:
@@ -48,6 +49,8 @@ def save_comprehensive_summary(img, binary_img, dist_transform, gsdt_mask, globa
     soma_overlay = np.ma.masked_where(soma_mask_show == 0, soma_mask_show)
     ax[3].imshow(soma_overlay, cmap='cool', alpha=0.6)
     ax[3].set_title(f"4. Pre-NMS Candidates (N={len(pre_nms_coords)}) & Ranges", fontsize=16)
+    if seed_selection_label:
+        ax[3].set_title(f"4. {seed_selection_label}: supplied centers", fontsize=16)
     ax[3].axis('off')
 
     # 画出所有候选的极值点（黄色小点）
@@ -73,6 +76,8 @@ def save_comprehensive_summary(img, binary_img, dist_transform, gsdt_mask, globa
     ax[7].imshow(mask_show, cmap='gray')
     ax[7].imshow(soma_overlay, cmap='cool', alpha=0.6)
     ax[7].set_title(f"5. Post-NMS Filtered Centers (N={len(post_nms_coords)})", fontsize=16)
+    if seed_selection_label:
+        ax[7].set_title(f"5. Reviewed centers (N={len(post_nms_coords)})", fontsize=16)
     ax[7].axis('off')
 
     # 这里只画红星，极其干净

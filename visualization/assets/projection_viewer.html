@@ -1,0 +1,77 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>局部三维信号查看器</title>
+<style>
+:root{color-scheme:light}*{box-sizing:border-box}body{font:15px system-ui,sans-serif;background:#eef2f6;color:#182737;margin:0;padding:22px}h1{font-size:22px;margin:0 0 8px}p{line-height:1.6;margin:8px 0}.toolbar,.panel{background:white;border:1px solid #d7e0e9;border-radius:10px;padding:14px}.toolbar{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin:14px 0}.window{display:flex;align-items:center;gap:6px}.window input[type=range]{width:100px}.window input[type=number]{width:62px}button,select{padding:7px 10px;border:1px solid #b6c4d2;border-radius:5px;background:#fff;color:#172737}button{cursor:pointer}button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #267ed5}label{white-space:nowrap}.panels{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.panel h2{font-size:19px;margin:0 0 8px}.depth-row{display:flex;gap:8px;align-items:center}.depth-row input[type=range]{flex:1;min-width:40px}.bounds{min-height:40px;color:#455b70;font-size:13px;margin-top:8px}canvas{width:100%;height:auto;display:block;background:#000;margin-top:8px}.note{font-size:13px;color:#455b70}.axes{font-size:12px;color:#455b70}a{color:#176bb0}.focus{display:flex;gap:6px;flex-wrap:wrap}@media(max-width:850px){.panels{grid-template-columns:1fr}.window input[type=range]{width:85px}}
+</style>
+<h1 id="title"></h1><p id="position"></p>
+<p class="note">这是原始体素的显示视图。切片、薄层厚度和灰度窗口只影响显示，原有连接诊断与 SWC 不变。SWC 叠加只画当前层内的线段。</p>
+<div class="toolbar">
+<label>显示方式 <select id="mode"><option value="slab">薄层 MIP</option><option value="slice">逐层切片</option><option value="full">整盒 MIP</option></select></label>
+<label>厚度 <select id="thickness"><option value="3">3 µm</option><option value="5" selected>5 µm</option><option value="9">9 µm</option></select></label>
+<label><input id="overlay" type="checkbox">叠加 SWC</label><label><input id="crosshair" type="checkbox">定位十字</label>
+<button id="reset">回到诊断位置</button><div class="focus" id="focus"></div>
+</div>
+<div class="toolbar">
+<label class="window">黑点 <input id="black" type="range" min="0" max="254"><input id="blackN" type="number" min="0" max="254"></label>
+<label class="window">白点 <input id="white" type="range" min="1" max="255"><input id="whiteN" type="number" min="1" max="255"></label>
+<label class="window">γ <input id="gamma" type="range" min="0.3" max="2" step="0.05" value="0.85"><output id="gammaV">0.85</output></label>
+<button id="auto">根据当前三视图调整窗口</button><button id="linear">线性原始灰度</button>
+<span class="note">三个方向共用窗口；切换层时保持窗口，避免亮度自动跳变。</span>
+</div>
+<div class="panels" id="panels"></div>
+<p class="note">薄层位置沿投影轴移动：XY 沿 Z，XZ 沿 Y，YZ 沿 X。范围是原图全局坐标；边界处会截短实际厚度。像素按原始 1 µm 间距显示，不插值补细节。</p>
+<p><a id="old" href="#">原整盒诊断图</a> · <a href="diagnosis.json">原诊断记录</a> · <a href="interactive.html">返回位置索引</a></p>
+<script type="application/json" id="data">__DATA_JSON__</script>
+<script>
+'use strict';
+const data=JSON.parse(document.getElementById('data').textContent), site=data.site;
+const raw=Uint8Array.from(atob(data.voxels_base64),c=>c.charCodeAt(0));
+const [nz,ny,nx]=data.shape_zyx, lo=data.origin_xyz, dims=[nx,ny,nz];
+if(raw.length!==nx*ny*nz)throw new Error('体素数据长度不一致');
+const planes=[{name:'XY',axis:2,h:0,v:1},{name:'XZ',axis:1,h:0,v:2},{name:'YZ',axis:0,h:1,v:2}];
+const $=id=>document.getElementById(id);let focus=site.center_xyz.slice();
+let state={mode:'slab',thickness:5,black:data.window[0],white:data.window[1],gamma:.85,overlay:false,crosshair:false};
+let timer=null,playing=null;
+$('title').textContent=`位置 ${site.site_id} · ${site.kind} · ${site.status}`;
+$('position').textContent='包围盒：'+site.bbox_xyz.map((b,i)=>`${'XYZ'[i]} [${b[0]}, ${b[1]}) µm`).join(' / ');
+$('old').href=site.image;
+function clamp(x,a,b){return Math.max(a,Math.min(b,x));}
+function percentile(values,q){const s=Array.from(values).sort((a,b)=>a-b);const k=(s.length-1)*q,i=Math.floor(k);return s[i]+(s[Math.ceil(k)]-s[i])*(k-i);}
+function stop(){if(timer)clearInterval(timer);timer=null;playing=null;for(const p of planes)if(p.play)p.play.textContent='播放';}
+function bounds(p){const n=dims[p.axis],center=Number(p.slider.value);if(state.mode==='full')return [0,n];const t=state.mode==='slice'?1:state.thickness;return [Math.max(0,center-Math.floor(t/2)),Math.min(n,center+Math.floor(t/2)+1)];}
+function project(p){const [a,b]=bounds(p),w=dims[p.h],h=dims[p.v],out=new Uint8Array(w*h),q=[0,0,0];for(let v=0;v<h;v++){q[p.v]=v;for(let u=0;u<w;u++){q[p.h]=u;let m=0;for(let d=a;d<b;d++){q[p.axis]=d;m=Math.max(m,raw[(q[2]*ny+q[1])*nx+q[0]]);}out[v*w+u]=m;}}return out;}
+function clipSegment(a,b,axis,low,high){const d=b[axis]-a[axis];if(Math.abs(d)<1e-12)return a[axis]>=low&&a[axis]<=high?[a,b]:null;let t0=(low-a[axis])/d,t1=(high-a[axis])/d;if(t0>t1)[t0,t1]=[t1,t0];t0=Math.max(0,t0);t1=Math.min(1,t1);if(t0>t1)return null;return [a.map((v,i)=>v+t0*(b[i]-v)),a.map((v,i)=>v+t1*(b[i]-v))];}
+function draw(p){
+ const [a,b]=bounds(p),w=dims[p.h],h=dims[p.v],pixels=project(p),scale=Math.max(4,Math.ceil(550/w));
+ const src=document.createElement('canvas');src.width=w;src.height=h;const sc=src.getContext('2d'),im=sc.createImageData(w,h);
+ for(let i=0;i<pixels.length;i++){const t=clamp((pixels[i]-state.black)/(state.white-state.black),0,1),v=Math.round(255*Math.pow(t,state.gamma));im.data[i*4]=v;im.data[i*4+1]=v;im.data[i*4+2]=v;im.data[i*4+3]=255;}sc.putImageData(im,0,0);
+ p.canvas.width=w*scale;p.canvas.height=h*scale;const ctx=p.canvas.getContext('2d');ctx.imageSmoothingEnabled=false;ctx.drawImage(src,0,0,p.canvas.width,p.canvas.height);ctx.scale(scale,scale);
+ let visibleSegments=0;
+ if(state.overlay){
+  const arms=[{xyz:site.context_xyz||[],color:'#48dfff'},...site.arms.map(arm=>({xyz:arm.xyz,color:({supported:'#3fe39a',disconnected:'#ff6262',uncertain:'#ffd34d',suspected_switch:'#ff80df'})[arm.diagnosis?.status]||'#ffd34d'})),{xyz:site.probe_opposite_xyz||[],color:'#80aaff',probe:true},{xyz:site.probe_ahead_xyz||[],color:'#ffae60',probe:true}];
+  ctx.lineWidth=Math.max(.1,w/420);
+  for(const arm of arms){ctx.strokeStyle=arm.color;ctx.setLineDash(arm.probe?[.5,.4]:[]);for(let i=1;i<arm.xyz.length;i++){const seg=clipSegment(arm.xyz[i-1],arm.xyz[i],p.axis,lo[p.axis]+a-.5,lo[p.axis]+b-.5);if(!seg)continue;ctx.beginPath();ctx.moveTo(seg[0][p.h]-lo[p.h]+.5,seg[0][p.v]-lo[p.v]+.5);ctx.lineTo(seg[1][p.h]-lo[p.h]+.5,seg[1][p.v]-lo[p.v]+.5);ctx.stroke();visibleSegments++;}}ctx.setLineDash([]);
+ }
+ if(state.crosshair&&focus[p.axis]>=lo[p.axis]+a-.5&&focus[p.axis]<=lo[p.axis]+b-.5){const x=focus[p.h]-lo[p.h]+.5,y=focus[p.v]-lo[p.v]+.5;ctx.strokeStyle='#ff9b26';ctx.lineWidth=Math.max(.08,w/650);ctx.beginPath();ctx.moveTo(x-1.5,y);ctx.lineTo(x+1.5,y);ctx.moveTo(x,y-1.5);ctx.lineTo(x,y+1.5);ctx.stroke();}
+ p.canvas.dataset.visibleSegments=String(visibleSegments);p.canvas.dataset.rawSum=String(pixels.reduce((x,y)=>x+y,0));p.canvas.dataset.bounds=JSON.stringify([a,b]);
+ p.value.textContent=`${'XYZ'[p.axis]} = ${lo[p.axis]+Number(p.slider.value)} µm`;
+ p.info.textContent=`参与层：${lo[p.axis]+a}–${lo[p.axis]+b-1}（共 ${b-a} 层 / ${b-a} µm）；${w} × ${h} 原始像素`;
+ p.slider.disabled=state.mode==='full';p.play.disabled=state.mode==='full';
+}
+function render(){for(const p of planes)draw(p);$('thickness').disabled=state.mode!=='slab';$('black').value=$('blackN').value=state.black;$('white').value=$('whiteN').value=state.white;$('gammaV').textContent=state.gamma.toFixed(2);}
+function setFocus(point){stop();focus=point.slice();for(const p of planes)p.slider.value=clamp(Math.round(point[p.axis]-lo[p.axis]),0,dims[p.axis]-1);render();}
+for(const p of planes){
+ const panel=document.createElement('section');panel.className='panel';panel.innerHTML=`<h2>${p.name}</h2><div class="depth-row"><button aria-label="${p.name} 前一层">−</button><input type="range" min="0" max="${dims[p.axis]-1}" step="1" aria-label="${p.name} 层位置"><button aria-label="${p.name} 后一层">+</button><button>播放</button></div><p class="value"></p><div class="bounds"></div><div class="axes">横轴 ${'XYZ'[p.h]} · 纵轴 ${'XYZ'[p.v]}（向下增大），单位 µm</div><canvas aria-label="${p.name} 原始信号投影"></canvas>`;
+ $('panels').append(panel);p.slider=panel.querySelector('input');p.canvas=panel.querySelector('canvas');p.value=panel.querySelector('.value');p.info=panel.querySelector('.bounds');const buttons=panel.querySelectorAll('button');p.play=buttons[2];
+ p.slider.addEventListener('input',()=>{stop();draw(p);});buttons[0].onclick=()=>{stop();p.slider.value=Math.max(0,Number(p.slider.value)-1);draw(p);};buttons[1].onclick=()=>{stop();p.slider.value=Math.min(dims[p.axis]-1,Number(p.slider.value)+1);draw(p);};
+ p.play.onclick=()=>{if(playing===p){stop();return;}stop();playing=p;p.play.textContent='暂停';timer=setInterval(()=>{p.slider.value=(Number(p.slider.value)+1)%dims[p.axis];draw(p);},250);};
+}
+for(const [i,point] of (site.pair_xyz||[]).entries()){const b=document.createElement('button');b.textContent=`定位交错分支 ${i+1}`;b.onclick=()=>setFocus(point);$('focus').append(b);}
+$('mode').onchange=()=>{stop();state.mode=$('mode').value;render();};$('thickness').onchange=()=>{state.thickness=Number($('thickness').value);render();};$('overlay').onchange=()=>{state.overlay=$('overlay').checked;render();};$('crosshair').onchange=()=>{state.crosshair=$('crosshair').checked;render();};$('reset').onclick=()=>setFocus(site.center_xyz);
+for(const key of ['black','white'])for(const id of [key,key+'N'])$(id).oninput=()=>{state[key]=clamp(Number($(id).value),key==='black'?0:1,key==='black'?254:255);if(state.black>=state.white){if(key==='black')state.white=state.black+1;else state.black=state.white-1;}render();};
+$('gamma').oninput=()=>{state.gamma=Number($('gamma').value);render();};
+$('auto').onclick=()=>{let values=[];for(const p of planes)values.push(...project(p));state.black=Math.floor(percentile(values,.05));state.white=Math.max(state.black+1,Math.ceil(percentile(values,.995)));render();};
+$('linear').onclick=()=>{state.black=0;state.white=255;state.gamma=1;$('gamma').value=1;render();};
+setFocus(focus);document.body.dataset.ready='true';
+window.viewerDebug={data,state,planes,project,bounds,clipSegment,render,raw};
+</script></html>

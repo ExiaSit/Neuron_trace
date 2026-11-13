@@ -1,3 +1,119 @@
+2026-11-13 当前入口、出口和实测耗时：见 docs/GEMMA_SOMA_WORKFLOW.txt。
+四样本 60003 / 89074 / 97117 / 106245 的胞体审核、两组 G-Cut 和基础剪枝已完成。
+Gemma 当前通过独立实验工具链运行，尚未自动接入 run_pipeline.py / 网页默认流程。
+入口：tools/run_gemma_soma_seeds.py -> tools/finish_gemma_soma_seed_review.py -> tools/run_gemma_seed_downstream.py。
+实验输入 ../test/0.84/data/；输出 ../test/0.84/runs/<run-name>/。
+新最终 SWC 位于 <downstream-run>/gemma_seeds/pruning_swcs/<id>.swc；marker 位于 soma_comparison/。
+本轮单候选平均请求 29.42 秒；每个 neuron 的模型请求+新组后处理已计时部分平均 32.94 分钟，
+另跑旧组对照则平均 38.33 分钟；不包含全部准备、渲染与报告开销，不是端到端墙钟均值。
+总报告 ../test/0.84/runs/20261113_multi_soma_suite/index.html；原图、权重及实验产物不提交 Git。
+
+以下为此前开发与实验记录：
+
+2026-11-13：已审核胞体结果接入后续流程，95918 两组对照已完成。
+入口 tools/run_gemma_seed_downstream.py；报告工具 tools/report_gemma_seed_downstream.py。
+结果 ../test/0.84/runs/20261113_95918_gemma_soma_downstream/index.html；复现与限制见该目录 EXPERIMENT.txt。
+保持基础剪枝语义；Gemma 胞体列表绕过旧种子去重，但仍需匹配到现有 APP2 树才参与 G-Cut。
+
+以下为此前胞体检测阶段的实验记录：
+
+v0.84 当前实验（2026-11-12）：G-Cut 前的 Gemma 胞体候选审核
+第 11 步已恢复之前的基础剪枝：前置短末梢、局部连接、其他胞体处理、胞体清理、近点合并、Zigzag。
+本轮不执行这些步骤，也不执行 G-Cut 分配；只测试胞体点识别及判重。
+入口：python tools/run_gemma_soma_seeds.py --cell 95918 --run-name <新目录名>
+默认 mask 内亮度第 55 百分位保持不变，欧氏距离阈值从严格 >5 降为 >4 µm。
+取两档连通域峰值的并集，防止降阈值导致合并而丢掉原峰值；只合并完全同坐标的重复提名。
+每个候选都交给 Gemma。NMS 仅生成对照，不参与新结果；目标 mask 去重、辅助胞体提名与后续自动合并不介入本轮模型能力测试。
+Gemma 输出 ACCEPT / DUPLICATE / REJECT / REVIEW；已知目标 T 保留并单独标识为元数据，不算模型检出。
+原图、局部三视图、连续五层切片、已保留胞体的共同视野及实际请求/响应均保存。
+48 µm 只选择附近对照点，绝不自动抑制候选；所有已保留坐标仍提供给模型。无法确定的点单独保留为 REVIEW。
+proposed_soma_context.json 是未应用的实验提议，不写回原任务，不产生剪枝 SWC。
+使用 --prepare-only 只生成候选；--limit N 仅审核前 N 个候选；去掉 --limit 可按相同版本缓存继续完整审核。
+修改输入、提示词、视图代码或模型配置必须使用新 run-name。
+模型能力无人工标签时保持未评估，不能把少点/多点解释为准确率。
+明确 REJECT 且 is_soma=no 时，将不适用的 identity=distinct/unknown 规范为 not_applicable，原答和字段修正均保存；相互矛盾的判断仍进 REVIEW。
+95918 已完成实验：../test/0.84/runs/20261112_95918_gemma_soma_seed_final/normalized/index.html；复现和局限见该 run 的 EXPERIMENT.txt。
+旧 branchwalk 实验已停止，仍可通过 tools/run_soma_branchwalk.py 显式复现。
+
+下面是历史流程说明，不代表当前实验范围：
+
+v0.84 历史已停用的默认剪枝方案（2026-11-12）：Gemma soma branch walk
+用户已替换旧剪枝流程。第 11 步从 resampled 剪枝前 SWC 开始，
+不执行短末梢、局部规则剪断、胞体清理/重连、其他胞体规则、近点合并或 Zigzag。
+从元数据验证目标 soma，广度优先访问每个仍与 soma 连通的分叉。
+每个出口向前连续展开三段 branch（分叉到下一分叉/末端），所有出口都展开。
+Gemma 同时看完整上游、前三段、局部 XY/XZ/YZ 原图、对应假设图和连续切片。
+原图和假设图坐标及窗口相同；同名标记是同一个三维点。可补图两轮。
+KEEP / REVIEW 继续访问下游；只有有定位证据的 CUT 断开明确的当前父子边。
+移出组件单独保存并修复其根 parent，原 parent 映射保存在审计中。
+上游疑似早已串线或准确边不清楚时保留 REVIEW，不在当前分叉扩大删除。
+本版仅执行当前分叉出口边的断开；分支中段的疑点可标记但不自由回切/重连。
+三视图联动查看器支持共享 XYZ 光标、薄层/单层/整盒 MIP 和可选路径叠加。
+没有人工标签时，不把删枝数量、JSON 合法性或结构校验解释为准确率。
+
+复现（在 v0.84 目录；需要既有 Gemma 服务 127.0.0.1:18484）：
+/home/pzy/anaconda3/envs/hb_seg/bin/python tools/run_soma_branchwalk.py --cell 95918 --run-name <新目录名>
+输出统一位于 ../test/0.84/runs/<新目录名>/，包括 index.html、逐分叉原图、
+实际提示词/请求/响应、诊断、执行计划、swc/、components/ 和 validation.json。
+输入、代码、提示词、渲染器、模型与启动参数均参与缓存版本；变更需新目录。
+--prepare-only 只准备；--limit N 只做 N 个新分叉，不导出最终剪枝结果。
+旧 tools/run_connection_experiment.py 与 tools/run_soma_ownership_pipeline.py 的 CLI
+当时转发到同一 branchwalk 入口；目前已恢复各自原入口，不再转发。
+针对性测试：python -m unittest discover -s tests -p 'test_soma_branchwalk*.py'
+
+以下全部是历史流程记录，不代表当前默认入口：
+
+v0.84 当前剪枝与连接诊断（2026-11-06，60003 实验）
+顺序：初始短末梢删除（严格<7.75 µm）→ 局部包围盒/XY-XZ-YZ诊断并保存
+→ 按已保存诊断剪断 → 胞体内部清理与根部重连 → 其他胞体进入剪枝 → 近点合并 → Zigzag。
+短末梢规则只在入口执行一次，末尾不重复。
+诊断覆盖每个拓扑分叉点及非相邻路径在三个投影上的交错位置，包括自交。
+局部臂长12 µm、包围盒外扩6 µm、投影近交距离1.5 µm；近交夹角≥30°，
+实际线段交点不限制夹角（包含浅角度交叉）。
+断口剪断须有局部两侧亮信号锚点、原图三维连续弱段≥3 µm，且至少两个
+随路径移动的3 µm薄层投影支持。还须至少一半弱段缺少横向线状对比，
+连续缺失≥2 µm，避免把变细变暗但连续的纤维当成断口。保护根/胞体及目标中心12 µm内连接。
+长分支以24 µm窗口、12 µm步长补查，覆盖分叉附近以外的连接段。
+新增疑似串线诊断：仅检查非拓扑分叉位置，转向≥60°后，来路/去路/去路反向
+延伸的三维线状信号支持率均≥80%，原方向前方支持率≤25%，且至少两个有效
+薄层投影支持，才建议剪断。探针距中心3–11 µm；距胞体14 µm内不产生此类候选。
+已有SWC来路/去路允许1 µm中心定位偏差，与断口线状信号保护一致；延伸探针
+不做中心搜索。报告同时保存中心采样与容差后支持率，便于检查阈值敏感性。
+此规则是连接归属推断（suspected_switch），不是已证实的物理断口；报告单独标注。
+投影交错或转角本身不删枝。蓝色虚线表示去路反向探针，橙色虚线表示来路前方探针。
+证据不足记uncertain并保留；影像支持不能证明生物学连接归属。
+按用户最新要求恢复其他胞体规则：邻居分割连通域≥20体素；沿边每0.5 µm检查，
+首次进入邻居的子节点及其下游被删除，几何修正前后各检查一次。按原同胞体
+信号归组规则排除确认属于目标的辅助块。neighbor_soma_cuts.json保存进入边及删除ID。
+每个位置保存剪断前的三方向原图和SWC叠加图，diagnosis.json先落盘，再执行
+cuts.json中的剪断，保存前后SWC；不恢复其他旧亮度、半径等剪枝规则。
+所有后续实验输出统一保存 /data/disk/Neuron_tracing_method/test/0.84/。
+输入副本和历史对照位于data/，每次运行写独立runs/<时间_ID>/，不覆盖源任务。
+可复现入口：/home/pzy/anaconda3/envs/hb_seg/bin/python tools/run_connection_experiment.py
+默认样本60003；latest-result.txt指向最新完成结果，index.html包含三版本对比与诊断。
+局部诊断新增 interactive.html：整盒 MIP、3/5/9 µm 薄层 MIP、单层切片，
+XY/XZ/YZ 分别滑动或播放；黑点、白点和 gamma 可调，切层时保持窗口。
+SWC 叠加默认关闭，开启时只显示当前薄层内的线段；像素按原 1 µm 网格显示。
+只刷新显示（不重跑剪枝）：/home/pzy/anaconda3/envs/hb_seg/bin/python tools/refresh_connection_views.py
+读取 latest-result.txt 中的已保存诊断，输出独立 runs 目录；latest-visualization.txt
+记录查看入口所在目录，不改 latest-result.txt、原诊断、剪断记录和 SWC。
+薄层减少层间遮挡，不增加真实分辨率；单层中看不到分支不能单独作为断连证据。
+以下为历史说明，当前顺序以本段及代码为准。
+
+v0.84 当前剪枝规则（2026-11-06）
+仅执行：胞体内部清理及必要的根部重连 → 合并过近节点（<0.01 µm）→
+Zigzag 修正（连续两次转向≥90°）→ 最终短末梢删除（严格<7.75 µm）。
+胞体清理使用原目标分割、halo_radius=0；缺少有效分割时沿用球形回退。
+保留全部胞体出口和分支根，不再按暗谷、亮度、半径、方向、mask连通性、
+邻居胞体、急转、曲折度、三维信号、片状信号或补全证据删枝。
+分叉父节点调整、多叉重排和异常二叉分叉剪枝也不再执行。
+7.75 µm 按含连接边的三维路径长度迭代判断，保护根、胞体和连接点。
+第12步仅校验结果并写审计，不再恢复历史分支或使用旧基线替换结果。
+审计记录 pruning_policy=soma-merge-zigzag-short-leaves-v1 和四项 active_rules；
+旧信号规则的决定列表为空。规则变更后请使用新的 output_root，历史输出不改写。
+针对性验证：tests/test_four_rule_pruning.py、tests/test_final_short_leaves.py。
+以下内容为继承的历史说明，剪枝规则以本段及当前代码为准。
+
 v0.83b 的主要目标（2026-11-01）：在 v0.82 基础上改善 mask 分支断裂，
 包括胞体—分支、分支—分支之间的连接。胞体分割作为位置/归属参考，
 不以胞体体积补全、形状拟合或整体扩张为优化目标。
@@ -649,6 +765,33 @@ APP2 骨架化实验（默认关闭）
   开运算的方式；app2_soma_opening_radius_um=0关闭全部胞体形状处理。
   骨架化不保证去除已有错误连接或表面毛刺；应检查远端分支是否丢失后再采用。
 
+Gemma 辅助 XY 交错剪枝实验（2026-11-10）
+  tools/run_model_crossing_experiment.py 是针对已有 v0.84 结果的可选附加阶段。
+  本次用于 97117，不改变默认批处理或覆盖原任务。原先的短末梢、胞体、
+  邻近胞体、合并近点和 Zigzag 处理结果作为输入保留。
+  扫描原始 XY MIP 线状信号的骨架交叉点，同时检查 SWC 投影交错。
+  SWC 交错点 Z 间距大于 4um 时记录深度分离并保留；其他候选沿根到末端排序。
+  交错前后 8um 测局部转角，16um 测较长尺度转角，并记录相对分支初始方向变化。
+  异常转角阈值为 max(45度，上游转角中位数 + 3倍稳健标准差 + 20度)。
+  Gemma 查看全局来路、XY/XZ/YZ 原图与 3um 薄层、连续 9 层 XY 切片。
+  首轮诊断后，tools/verify_model_crossing_transfers.py 对方向异常、入/出段
+  三维信号支持率均至少55%的串线候选独立复核，不给出首轮结论和转角数值。
+  最终剪断需再次明确 SWC 转入另一根三维纤维，至少两个视角（含 XZ 或 YZ）
+  有原图证据，并排除纯投影重叠、正常弯曲和分叉。模型置信度不作删除阈值。
+  跨间隙跳到另一根纤维也可构成串线，不要求两根真实纤维物理接触；
+  直线反向探针作为参考，不以其支持率否决弯曲纤维上的视觉判断。
+  最终阶段从首轮的原始 SWC 输入重新应用复核决定，不叠加首轮临时剪断。
+  根和胞体保护区不删除。所有图像、请求清单和回答先保存，再校验输入哈希，
+  剪断候选节点的指定下游边及其子树。未满足条件的候选保留。
+  这是待验证的归属推断，尚无人工真值；节点变少不能作为准确率提高的证据。
+  运行示例（先启动本地 Gemma 服务）：
+    python tools/run_model_crossing_experiment.py --cell 97117 --input-run <已有运行目录> --run-name <新运行名>
+  --prepare-only 只扫描；--resume 在输入与代码哈希一致时续跑。
+    python tools/verify_model_crossing_transfers.py --source-run <首轮诊断目录> --run-name <最终复核运行名>
+  输出位于 /data/disk/Neuron_tracing_method/test/0.84/runs/<新运行名>/。
+  python tools/render_model_crossing_review.py <新运行目录> 添加可滑动薄层三视图。
+  测试：python -m unittest tests.test_model_crossing tests.test_model_transfer。
+
 胞体附近短末端检查（2026-10-30；2026-10-31 已撤回）
   当前流程不再调用 algorithms/tracing/soma_terminals.py。以下为历史实验规则说明，
   仅保留供旧结果审计；soma_terminal_audit.status=disabled，不产生删除。
@@ -665,3 +808,28 @@ APP2 骨架化实验（默认关闭）
   用最终短枝规则的虚拟预览识别被微小侧枝遮蔽的末端；实际长度剪枝仍最后执行。
   决策写入soma_terminal_audit；网页剪枝原因码soma_adjacent_dead_end。
   测试：python -m unittest tests.test_soma_terminals tests.test_final_short_leaves。
+
+2026-11-11：97117 完整上游与候选胞体归属实验
+  入口：tools/run_soma_ownership_experiment.py（本地 Gemma 服务 127.0.0.1:18484）。
+  默认结果：test/0.84/runs/20261111_97117_global_soma_v3_checked/。
+  输入是首次 Gemma 剪枝之前的 v0.84 SWC；本实验为附加复核，不替换历史结果。
+  在完整原始图像中检测胞体候选，通过三维图像骨架提出竞争胞体路径假设。
+  模型同时查看目标胞体到当前分支的完整上游、通往其他候选胞体的路径、
+  XY/XZ/YZ 原始/叠加图以及沿路径展开的原始信号，定位首次串线处。
+  距离、最短路径成本和模型置信度均不能单独触发删除。
+  可选剪断点必须有测得的上游转换：方向异常、局部信号间断，或竞争路径
+  支持从目标胞体转向其他胞体；且距外来路径支持段沿 SWC 不超过 12 um。
+  其他胞体路径须有连续三维信号支持，不能经过第三个胞体候选。
+  每个拟剪断点另作局部多视角复核，薄层图仅叠加层内线段。
+  全部诊断与模型原始响应先保存，之后才按通过复核的计划删除下游子树。
+  可使用 --prepare-only 生成候选；--limit N 做分批诊断，不写最终 SWC；
+  相同输入与代码可续跑，输入或代码变化须另建 --run-name。
+  胞体检测和路径归属均为实验性判断，尚无人工归属真值；删除量不代表准确率。
+  完整推荐入口：tools/run_soma_ownership_pipeline.py；它依次运行上面的模型
+  诊断、tools/reconcile_soma_ownership.py 归属一致性检查，以及
+  tools/render_soma_ownership_effect.py 重放/结构校验和最终报告。
+  如果某个下游段被模型明确判为目标神经元，则拦截覆盖它的上游整树删除，
+  将矛盾列入 consistency.json；不把任何一方的模型结论当作人工真值。
+  --finalize-only 可对已完成的模型批次执行后两步；完整流程成功后才更新
+  latest-model-result-97117.txt。未做一致性检查的输出归档到
+  model_only_before_consistency/，以顶层 swc/97117.swc 为最终实验结果。

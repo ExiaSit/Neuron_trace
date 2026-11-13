@@ -27,9 +27,8 @@ from skimage import graph as skgraph
 from scipy.spatial import cKDTree
 from skimage.graph import route_through_array, MCP_Geometric
 from collections import deque
-from algorithms.tracing.signal_support import SignalEvidence, prune_unsupported, prune_crossing_switches
-from algorithms.tracing.sheet_signal import prune_sheet_supported
-from algorithms.tracing.terminal_pruning import prune_final_short_leaves
+from algorithms.tracing.terminal_pruning import prune_initial_short_leaves
+from algorithms.tracing.connection_diagnostics import diagnose_then_cut, POLICY
 
 from pipeline_config import BASE_DIR, PATHS
 from swc_handler import parse_swc, write_swc, flip_swc, shift_swc
@@ -230,146 +229,7 @@ class NeuronGraphProcessor:
         self.scale_xyz = scale_xyz
         self.conf_length = conf_length
         self.rejection_callback = rejection_callback
-        self.last_rejection = None
-        self.supported_segments = set()
-        self.confirmed_soma_segments = set()
-    
-    def _detect_rebound(self, new_parent, current_intensity, lookback_nodes=15):
-        """长程反弹检测：专杀缓慢爬升进入邻居胞体的串线"""
-        curr = new_parent
-        min_history_int = current_intensity
-        
-        for _ in range(lookback_nodes):
-            if not self._has_single_predecessor(curr): break
-            pred = list(self.graph.predecessors(curr))[0]
-            past_intensity = self.graph.edges[pred, curr]['intensity']
-            min_history_int = min(min_history_int, past_intensity)
-            curr = pred
-            
-        # 如果在过去 15 个节点中出现过低谷，而现在的亮度爬升到了谷底的 2 倍以上，
-        # 且绝对值暴增了 30 以上，说明它已经脱离了自然衰减，正在爬另一个细胞！切断！
-        if current_intensity > (min_history_int * 2.0 + 30):
-            return True
-        return False
-    
-    def successive_check(self, old_parent, old_child, intensity, radius, max_radius, 
-                         path_dist, vn, parent_to_child):
-        new_parent, new_child = (old_parent, old_child) if parent_to_child else (old_child, old_parent)
-        self.last_rejection = None
-        
-        if not self._has_single_predecessor(new_parent): return True
-        
-        parent_edges = self._get_predecessor_edges(new_parent)
-        if not parent_edges: return True
 
-        path_dist1, vn1, radius1, max_radius1, intensity1 = parent_edges[0]
-        
-        if old_child in self.confirmed_soma_segments:return True
-        if self._check_angle_and_radius(path_dist, path_dist1, vn1, vn, radius, radius1, max_radius):
-            self.last_rejection = (
-                "分支半径绝对值过大",
-                "NeuronGraphProcessor._check_angle_and_radius",
-            )
-            return False
-        # Supported, direction-consistent brightening is normal fluorescence.
-        if old_child in self.supported_segments and np.dot(vn1, vn if parent_to_child else -vn) > .5:
-            return True
-        if self._check_intensity_with_parent(intensity, radius, path_dist, parent_edges):
-            self.last_rejection = (
-                "相邻长段亮度突然升高",
-                "NeuronGraphProcessor._check_intensity_with_parent",
-            )
-            return False
-        
-        # ===================================================
-        # 【新增调用】：执行长程爬升拦截
-        # ===================================================
-        if self._detect_rebound(new_parent, intensity): 
-            self.last_rejection = (
-                "长程亮度从低谷异常反弹",
-                "NeuronGraphProcessor._detect_rebound",
-            )
-            return False
-
-        new_parent2 = list(self.graph.predecessors(new_parent))[0]
-        if not self._has_single_predecessor(new_parent2): return True
-        
-        passed = self._check_intensity_and_radius(
-            intensity, radius, path_dist, parent_edges
-        )
-        if not passed:
-            self.last_rejection = (
-                "当前亮度高于前两代分支",
-                "NeuronGraphProcessor._check_intensity_and_radius",
-            )
-        return passed
-    
-    def _has_single_predecessor(self, node):
-        return self.graph.has_node(node) and self.graph.in_degree(node) == 1
-    
-    def _detect_valley_crossing(self, new_parent, current_intensity, lookback_nodes=20):
-        """长程回溯：检查是否跨越了深暗的背景沟壑后，又爬上了另一个高亮结构"""
-        curr = new_parent
-        min_intensity = current_intensity
-        
-        # 往回遍历最多 lookback_nodes 代祖先
-        for _ in range(lookback_nodes):
-            if not self._has_single_predecessor(curr):
-                break
-            pred = list(self.graph.predecessors(curr))[0]
-            edge_data = self.graph.edges[pred, curr]
-            past_intensity = edge_data['intensity']
-            min_intensity = min(min_intensity, past_intensity)
-            curr = pred
-            
-        # 核心拦截逻辑：如果在过去一段距离内，最暗的地方极暗（比如背景水平），
-        # 而当前节点的亮度竟然是谷底的 3 倍以上，且绝对增量 > 30，直接切断！
-        if current_intensity > (min_intensity * 3.0 + 30):
-            return True # 发现深谷反弹，判定为跨细胞串线！
-            
-        return False
-    
-    def _get_predecessor_edges(self, node):
-        edges_data = []
-        current = node
-        for _ in range(2): 
-            if not self._has_single_predecessor(current): break
-            pred = list(self.graph.predecessors(current))[0]
-            edge_data = self.graph.edges[pred, current]
-            edges_data.append((edge_data['path_dist'], edge_data['vn'], edge_data['radius'], edge_data['max_radius'], edge_data['intensity']))
-            current = pred
-        return edges_data
-   
-    def _check_angle_and_radius(self, path_dist, path_dist1, vn1, vn, radius, radius1, max_radius):
-        # 连续段的 107.5 度硬切已移除；角度异常改由二叉分叉 QC 联合判定。
-        radius_hard = (radius > 12) or (max_radius > 15)
-        return radius_hard
-        
-    def _check_intensity_with_parent(self, intensity, radius, path_dist, parent_edges):
-        path_dist1, _, radius1, _, intensity1 = parent_edges[0]
-        if (path_dist > self.conf_length) and (path_dist1 > self.conf_length):
-            # 4. 亮度限制大幅放宽：允许真实的荧光“串珠”闪烁！
-            # 只有当亮度发生了极其离谱的暴增（例如涨了 50% 且绝对值也增加了）才拦截
-            if intensity > (intensity1 * 1.5 + 20): 
-                return True
-        return False
-            
-    def _check_intensity_and_radius(self, intensity, radius, path_dist, parent_edges):
-        if len(parent_edges) < 2:
-            return True
-        
-        path_dist1, _, radius1, _, intensity1 = parent_edges[0]
-        path_dist2, _, radius2, _, intensity2 = parent_edges[1]
-        
-        # 5. 废除“单调递减”的暴政！不再要求 intensity <= intensity1
-        # 只要没有暴增到碰见其他胞体的程度，都让它活下去
-        if path_dist > self.conf_length:
-            max_int = max(intensity1, intensity2)
-            if intensity > (max_int * 1.5 + 20):
-                return False
-        
-        return True
-    
     def add_edge_with_attributes(self, parent, child, weight, attributes):
         self.graph.add_edge(parent, child, weight=weight)
         nx.set_edge_attributes(self.graph, {(parent, child): attributes})
@@ -378,24 +238,9 @@ class NeuronGraphProcessor:
         if child in visited:
             return False
         if child not in fseg_dict:
-            if self.rejection_callback:
-                self.rejection_callback(
-                    child,
-                    "拓扑段未进入特征图（通常为暗谷过滤）",
-                    "process_neuron_morphology: fseg_dict",
-                )
-            return False
+            raise ValueError(f'Missing topology segment {child}')
         intensity, radius, max_radius, vn, path_dist, euc_dist = fseg_dict[child]
-        
-        if not self.successive_check(
-            parent, child, intensity, radius, max_radius, path_dist, vn,
-            parent_to_child
-        ):
-            if self.rejection_callback and self.last_rejection:
-                reason, code = self.last_rejection
-                self.rejection_callback(child, reason, code)
-            return False
-        
+
         attributes = {'intensity': intensity, 'radius': radius, 'max_radius': max_radius, 'vn': vn if parent_to_child else -vn, 'path_dist': path_dist, 'euc_dist': euc_dist}
         weight = 1 if parent_to_child else -1
         self.add_edge_with_attributes(parent, child, weight, attributes)
@@ -428,10 +273,9 @@ class NeuronGraphProcessor:
             parent_id = topo.pos_dict[current][6]
             if parent_id != -1 and parent_id not in visited:
                 intensity, radius, max_radius, vn, path_dist, euc_dist = fseg_dict[current]
-                if self.successive_check(parent_id, current, intensity, radius, max_radius, path_dist, -vn, parent_to_child=False):
-                    attributes = {'intensity': intensity, 'radius': radius, 'max_radius': max_radius, 'vn': -vn, 'path_dist': path_dist, 'euc_dist': euc_dist}
-                    self.add_edge_with_attributes(current, parent_id, -1, attributes)
-                    processing.append(parent_id)
+                attributes = {'intensity': intensity, 'radius': radius, 'max_radius': max_radius, 'vn': -vn, 'path_dist': path_dist, 'euc_dist': euc_dist}
+                self.add_edge_with_attributes(current, parent_id, -1, attributes)
+                processing.append(parent_id)
             visited.add(current)
 
 
@@ -938,24 +782,6 @@ def apply_qc_geometry_steps(swc_list, removal_callback=None, signal_evidence=Non
         "连续两次急转形成 Zigzag",
         "qc_remove_zigzag",
     )
-    qc_tune_branch(neuron)
-    qc_correct_multifurcation(neuron, window_length=5.0)
-    run_removal_step(
-        qc_remove_bad_binary_bifurcation,
-        "异常二叉分叉：子枝夹角大于140度且偏离父枝延伸线大于70度",
-        "qc_remove_bad_binary_bifurcation",
-        window_length=5.0,
-        child_child_angle_threshold=140.0,
-        parent_child_angle_threshold=70.0,
-    )
-    run_removal_step(
-        qc_remove_branch_towards_soma,
-        "分叉后的分支重新朝向胞体",
-        "qc_remove_branch_towards_soma",
-        min_path_length=10.0,
-        window_length=5.0,
-        towards_soma_degree=60.0,
-    )
     return neuron.as_swc_list()
 
 
@@ -1442,7 +1268,6 @@ def process_neuron_morphology(input_imgfile, swc_neu, raw_imgfile, out_swc_dir, 
         return save_pruning_summary(show_steps, viz_buffer, raw_image, morph, sphere_zradius, pruning_reasons, prefix, mip_dir)
     # 1. 加载数据
     raw_image = ImageParser(raw_imgfile).load()
-    signal_evidence = SignalEvidence(raw_image)
     tree = parse_swc(swc_neu)
     if len(tree) == 1:
         node = tree[0]
@@ -1466,25 +1291,42 @@ def process_neuron_morphology(input_imgfile, swc_neu, raw_imgfile, out_swc_dir, 
         if parent_id != -1:
             original_children.setdefault(parent_id, []).append(node_id)
 
-    morph = Morphology(tree)
+    original_tree = tree
 
     curr_meta = meta.loc[cell_id]
     orig_scale_xyz = np.array([float(curr_meta['xy_resolution'])/1000., float(curr_meta['xy_resolution'])/1000., float(curr_meta['z_resolution'])/1000.])
     sxyz = np.array([float(curr_meta.soma_x)*orig_scale_xyz[0], float(curr_meta.soma_y)*orig_scale_xyz[1], float(curr_meta.soma_z)*orig_scale_xyz[2]])
 
 
-    _visualize_step("step01_original_input", tree_data=tree, scale=2)
+    # First topology-changing operation: remove <7.75 um terminals exactly once.
+    tree, short_leaf_audit = prune_initial_short_leaves(tree)
+    _record_removed_ids(short_leaf_audit['removed_ids'],
+                        "初始末梢三维路径长度小于 7.75 µm", "initial_short_terminal")
+    print(f"Initial short-terminal pruning (<7.75 um): {len(original_tree)} -> {len(tree)} nodes", flush=True)
+    diagnostic_dir = os.path.join(mip_dir, f'{prefix}_connections')
+    os.makedirs(diagnostic_dir, exist_ok=True)
+    write_swc(tree, os.path.join(diagnostic_dir, 'before_connection_cuts.swc'))
+    tree, connection_audit = diagnose_then_cut(tree, raw_image, diagnostic_dir, sxyz)
+    _record_removed_ids(connection_audit['removed_ids'],
+                        "局部三维/薄层诊断：信号断口或疑似串线（见连接审计）", "local_connection_gap")
+    write_swc(tree, os.path.join(diagnostic_dir, 'after_connection_cuts.swc'))
+    if len(tree) == 1:
+        from types import SimpleNamespace
+        morph = SimpleNamespace(tree=tree, pos_dict={tree[0][0]: tree[0]})
+    else:
+        morph = Morphology(tree)
+    _visualize_step("step01_original_input", tree_data=original_tree, scale=2)
 
     # 2. 构建拓扑与特征
     coords_dict = {node[0]: np.array(node[2:5]) for node in morph.tree}
-    topo_tree, seg_dict = morph.convert_to_topology_tree()
-    topo = Topology(topo_tree)
+    if len(tree) == 1:
+        topo_tree, seg_dict = tree, {}
+        topo = SimpleNamespace(pos_dict=morph.pos_dict, child_dict={})
+    else:
+        topo_tree, seg_dict = morph.convert_to_topology_tree()
+        topo = Topology(topo_tree)
     
     fseg_dict = {}
-    supported_segments = set()
-    confirmed_soma_segments = set()
-    from algorithms.tracing.soma_signal_groups import inside_confirmed
-    confirmed_mask=globals().get("CONFIRMED_SOMA_MASK")
     for sid, seg_ids in seg_dict.items():
         pid = topo.pos_dict[sid][-1]
         if pid == -1: continue
@@ -1499,23 +1341,6 @@ def process_neuron_morphology(input_imgfile, swc_neu, raw_imgfile, out_swc_dir, 
         intensity = np.median(intensities) if len(intensities) >= 3 else np.mean(intensities)
         euc_dist = np.linalg.norm((coords_dict[pid] - coords_dict[sid]) * 1.0)
 
-        if len(intensities) >= 5 and path_dist > 5.0:
-            end_intensity_1 = np.mean(intensities[:2])
-            end_intensity_2 = np.mean(intensities[-2:])
-            min_end_base = min(end_intensity_1, end_intensity_2)
-            middle_min = np.min(intensities[1:-1])
-            
-            # 【核心修改】：不仅要求跌幅巨大（<25%），还要要求绝对亮度极低（<15）
-            if middle_min < min_end_base * 0.25 and middle_min < 15:
-                _record_original_subtree(
-                    sid,
-                    "分支中间出现深暗谷值",
-                    "process_neuron_morphology: dark-valley filter",
-                )
-                continue
-
-        if inside_confirmed(curr_coords,confirmed_mask) and np.min(intensities)>=35:confirmed_soma_segments.add(sid)
-        if signal_evidence.supported_xyz(curr_coords):supported_segments.add(sid)
         fseg_dict[sid] = (intensity, radius, max_radius, vn, path_dist, euc_dist)
 
     scale_xyz = np.array([1.0, 1.0, 1.0]) 
@@ -1588,22 +1413,10 @@ def process_neuron_morphology(input_imgfile, swc_neu, raw_imgfile, out_swc_dir, 
         dists2soma = np.linalg.norm((sxyz - topo_coords) * scale_xyz, axis=1)
         in_soma_ids = set(topo_ids[dists2soma < sphere_zradius])
 
-    _, neighbor_soma_blocked_ids = remove_branches_entering_neighbor_soma(
-        tree, neighbor_soma_context, sample_step=0.5
-    )
-    _record_removed_ids(
-        neighbor_soma_blocked_ids,
-        "分支进入周围其他 neuron 的胞体区域",
-        "remove_branches_entering_neighbor_soma",
-        overwrite=True,
-    )
-    for sid, seg_ids in seg_dict.items():
-        pid = topo.pos_dict[sid][-1]
-        segment_node_ids = {sid, *seg_ids}
-        if pid != -1:
-            segment_node_ids.add(pid)
-        if segment_node_ids & neighbor_soma_blocked_ids:
-            fseg_dict.pop(sid, None)
+    if not in_soma_ids:
+        # A misplaced fallback sphere must not discard the entire exterior.
+        # Use the existing root as the anchor, without swallowing other nodes.
+        in_soma_ids = set(app2_root_id)
 
     _record_removed_ids(
         in_soma_ids,
@@ -1622,96 +1435,16 @@ def process_neuron_morphology(input_imgfile, swc_neu, raw_imgfile, out_swc_dir, 
         if parent != -1 and parent not in in_soma_ids:
             intersection_pairs.append([id0, parent, 0])
 
-    # ==========================================
-    # 🌟 新增的可视化与角度计算逻辑
-    # ==========================================
-    # ==========================================
-    # 🌟 新增的可视化与角度计算逻辑 (带防重叠偏移)
-    # ==========================================
-    # ==========================================
-    # 🌟 新增的可视化与角度计算逻辑 (防重叠延长线版)
-    # ==========================================
-    # ==========================================
-    # 🌟 新增的可视化与角度计算逻辑 (只显示被Cut的，带双箭头可视化)
-    # ==========================================
-    print(app2_root_id)
-    if app2_root_id:
-        # 如果找到了，就用它的坐标当做真正的中心 (True Center)
-        true_center = np.array(topo.pos_dict[app2_root_id[0]][2:5])
-    else:
-        # 极端兜底情况，找不到就退回用 sxyz
-        true_center = sxyz
-    is_pairs = []
-    rejected_pairs = []       # 用来存放被剪掉的死树枝
-    angle_annotations = []    # 用来存放要在图上打印的文字信息
-
-    for pair in intersection_pairs:
-        c0, c1 = np.array(topo.pos_dict[pair[0]][2:5]), np.array(topo.pos_dict[pair[1]][2:5])
-        
-        vsc, vc = (c0 - true_center), (c1 - c0)
-        norm_vsc = np.linalg.norm(vsc)
-        norm_vc = np.linalg.norm(vc) + 1e-10 # 给实际生长方向加个防0底线
-        
-        # 树枝真实的起点坐标
-        root_x, root_y = c0[0], c0[1]
-        
-        # 先计算实际生长方向 (绿箭头方向)，这总是安全的
-        dir_vc_x, dir_vc_y = vc[0] / norm_vc, vc[1] / norm_vc
-        
-        # 胞体出口不再按单边长度剪枝，仅保留方向判断。
-        # 🌟 这里的防线顺便保护了除零错误！
-        if norm_vsc < 1e-3:
-            # 如果起点完全等于中心点(true_center)，它长向任何方向都是合理的，直接放行！
-            is_pairs.append(pair)
-            continue
-            
-        # 走到这里，说明 c0 不是中心点，可以安全地除以 norm_vsc 了
-        dir_vsc_x, dir_vsc_y = vsc[0] / norm_vsc, vsc[1] / norm_vsc
-        arrow_len = 25
-            
-        dot_val = np.dot(vsc/norm_vsc, vc/norm_vc)
-        angle_deg = np.degrees(np.arccos(np.clip(dot_val, -1.0, 1.0)))
-        
-        sid=pair[1] if pair[2] else pair[0]
-        if dot_val > 0 or sid in supported_segments:
-            is_pairs.append(pair)
-        else:
-            rejected_pairs.append(pair)
-            _record_original_subtree(
-                pair[1],
-                "穿出胞体边界时方向朝向胞体内部",
-                "process_neuron_morphology: soma-boundary direction check",
-            )
-            text_x = root_x + dir_vc_x * 50
-            text_y = root_y + dir_vc_y * 50
-            text_str = f"CUT: {angle_deg:.0f}°\n(dot: {dot_val:.2f})"
-            
-            angle_annotations.append({
-                'rx': root_x, 'ry': root_y, 
-                'text_x': text_x, 'text_y': text_y, 
-                'text': text_str, 'color': 'red',
-                'vsc_end_x': root_x + dir_vsc_x * arrow_len,  
-                'vsc_end_y': root_y + dir_vsc_y * arrow_len,
-                'vc_end_x': root_x + dir_vc_x * arrow_len,   
-                'vc_end_y': root_y + dir_vc_y * arrow_len
-            })
-    # --- 生成用于画图的 debug 树 ---
+    # All soma exits are retained, irrespective of length or direction.
+    true_center = (np.array(topo.pos_dict[app2_root_id[0]][2:5])
+                   if app2_root_id else sxyz)
+    is_pairs = intersection_pairs
     debug_sphere_tree = []
-    for pair in is_pairs:
-        p0, p1 = morph.pos_dict[pair[0]], morph.pos_dict[pair[1]]
-        debug_sphere_tree.append((pair[0], 2, *p0[2:5], p0[5], -1))
-        debug_sphere_tree.append((pair[1], 2, *p1[2:5], p1[5], pair[0]))
-        
-    for pair in rejected_pairs:
-        p0, p1 = morph.pos_dict[pair[0]], morph.pos_dict[pair[1]]
-        debug_sphere_tree.append((pair[0], 4, *p0[2:5], p0[5], -1))
-        debug_sphere_tree.append((pair[1], 4, *p1[2:5], p1[5], pair[0]))
-
-    _visualize_step("step02_sphere_cuts", tree_data=debug_sphere_tree, scale=2, annotations=angle_annotations)
-    # ==========================================
-    # ==========================================
-    # ==========================================
-
+    for id0, id1, _ in is_pairs:
+        p0, p1 = morph.pos_dict[id0], morph.pos_dict[id1]
+        debug_sphere_tree.extend([(id0, 2, *p0[2:5], p0[5], -1),
+                                  (id1, 2, *p1[2:5], p1[5], id0)])
+    _visualize_step("step02_sphere_cuts", tree_data=debug_sphere_tree, scale=2)
 
     # 4. 图构建
     graph = nx.DiGraph()
@@ -1723,13 +1456,9 @@ def process_neuron_morphology(input_imgfile, swc_neu, raw_imgfile, out_swc_dir, 
         conf_length=2.5,
         rejection_callback=_record_original_subtree,
     )
-    processor.supported_segments = supported_segments
-    processor.confirmed_soma_segments = confirmed_soma_segments
     visited = set()
     for pair in is_pairs:
         id0, id1, pc_type = pair
-        if id1 in neighbor_soma_blocked_ids:
-            continue
         visited.add(id0)
         if pc_type == 1: processor.traverse_sequential_branch(id1, fseg_dict, visited, topo)
         else: processor.traverse_inverse_branch(id0, id1, fseg_dict, visited, topo)
@@ -1790,53 +1519,20 @@ def process_neuron_morphology(input_imgfile, swc_neu, raw_imgfile, out_swc_dir, 
 
     root_ids = [n for n in graph.nodes() if graph.in_degree(n) == 0]
     soma_coords = (int(true_center[0]), int(true_center[1]), int(true_center[2]))
-    region_binary, offset, bbox = extract_binary_region(img_binary, soma_coords, root_ids, coords_dict, expansion_ratio=0.2)
+    # Mask connectivity is no longer a rejection criterion. Reconnect all roots.
+    _visualize_step("step06_retained_roots", tree_data=[
+        (rid, 3, *coords_dict[rid], 5.0, -1) for rid in root_ids], scale=2)
 
-    good_points, bad_points, connectivity_info, ccs_region = check_root_ids_connectivity_in_region(
-        region_binary, offset, soma_coords, root_ids, coords_dict
-    )
-    
-    # ==========================================================
-    # 🛡️ 核心手术：强制营救距离胞体极近的“假性断连”根节点
-    # ==========================================================
-    rescued_points = []
-    for rid in bad_points:
-        dist_to_soma = np.linalg.norm((coords_dict[rid] - sxyz) * scale_xyz)
-        if dist_to_soma < sphere_zradius + 15.0:
-            rescued_points.append(rid)
-            
-    good_points.extend(rescued_points)
-    bad_points = [r for r in bad_points if r not in rescued_points]
-
-    debug_conn_tree = []
-    for rid in root_ids:
-        c = coords_dict[rid]
-        ctype = 3 if rid in good_points else 2
-        debug_conn_tree.append((rid, ctype, *c, 5.0, -1))
-    _visualize_step(
-        "step06_connectivity_check", tree_data=debug_conn_tree, scale=2
-    )
-
-    for bad_root_id in bad_points:
-        _record_original_subtree(
-            bad_root_id,
-            "分支根节点与胞体所在二值连通域不连通",
-            "check_root_ids_connectivity_in_region",
-        )
-    graph, _, _ = remove_bad_root_ids_and_descendants(graph, bad_points)
-    root_ids = [x for x in root_ids if x in good_points]
-
-    if len(graph) <= 1:
-        print('No salient tree found!')
-        _save_combined_grid_plot()
-        return None, None
-
-    # 6. 路径重连
-    # 6. 路径重连
+    # 6. 胞体清理后的根部重连
     start_id = max(max(morph.pos_dict.keys()), max([node[6] for node in morph.tree])) + 1
     # （记得修复前面提到的 merge_ratio 漏传的 Bug）
-    DG, root_to_id = connect_roots_to_soma_region(img_binary, soma_coords, root_ids, coords_dict, scale_xyz, 
-                                 start_id, expansion_ratio=0.2, merge_radius_ratio=0.2)
+    if root_ids:
+        DG, root_to_id = connect_roots_to_soma_region(
+            img_binary, soma_coords, root_ids, coords_dict, scale_xyz,
+            start_id, expansion_ratio=0.2, merge_radius_ratio=0.2)
+    else:
+        DG, root_to_id = nx.DiGraph(), {}
+        DG.add_node(start_id, coords=true_center, radius=10.0)
 
     # 🌟 修改点 2：强行让新生成的中心节点“认祖归宗”
     if app2_root_id:
@@ -1858,12 +1554,10 @@ def process_neuron_morphology(input_imgfile, swc_neu, raw_imgfile, out_swc_dir, 
             nx.set_node_attributes(DG, {orig_root_id: {'radius': orig_radius}})
 
     dg_list = _graph_to_swc_list(DG, color_type=2)
-
-    dg_list = _graph_to_swc_list(DG, color_type=2)
     _visualize_step("step07_new_connections", tree_data=dg_list, scale=2)
 
     # ==========================================================
-    # 6 & 7. [极简暴力版] 获取真实中心与直线重连
+    # Assemble the retained branches and soma reconnection paths.
     # ==========================================================
     # 提取原 SWC 的真实根节点 ID 和信息
     app2_root_id = [nid for nid in topo_ids if topo.pos_dict[nid][-1] == -1]
@@ -1901,198 +1595,53 @@ def process_neuron_morphology(input_imgfile, swc_neu, raw_imgfile, out_swc_dir, 
     tree_final=_graph_to_swc_list(assembled)
     tree_final=[(n[0],1 if n[0]==orig_root_id else 3,*n[2:]) for n in tree_final]
 
-    tree_final, neighbor_soma_removed_ids = remove_branches_entering_neighbor_soma(
-        tree_final, neighbor_soma_context, sample_step=0.5
-    )
-    _record_removed_ids(
-        neighbor_soma_removed_ids,
-        "分支进入周围其他 neuron 的胞体区域",
-        "remove_branches_entering_neighbor_soma",
-    )
+    # Restore the foreign-soma rule, excluding auxiliary pieces confirmed to
+    # belong to the target by the original same-soma signal grouping rule.
+    soma_groups = dict(same_auxiliary_components=[])
+    if neighbor_soma_context and neighbor_soma_context.get('component_count', 0):
+        from algorithms.tracing.soma_signal_groups import auxiliary_groups, exclude_confirmed_neighbors
+        _, _, _, soma_groups = auxiliary_groups(
+            raw_image, mask_target_xyz[::-1], json_file, soma_mask_file)
+        neighbor_soma_context = exclude_confirmed_neighbors(
+            neighbor_soma_context, [g['center_zyx'] for g in soma_groups['same_auxiliary_components']])
+    neighbor_soma_audit = dict(
+        rule='remove_branches_entering_neighbor_soma', sample_step_um=0.5,
+        min_neighbor_volume_voxels=20,
+        neighbor_component_count=(neighbor_soma_context or {}).get('component_count', 0),
+        same_soma_groups=soma_groups, removed_ids=[], events=[])
 
-    # Apply the selected QC_utils topology repairs and branch-direction filters.
-    tree_final = apply_qc_geometry_steps(
-        tree_final, removal_callback=_record_removed_ids, signal_evidence=signal_evidence
-    )
+    def cut_neighbor_somas(rows, phase):
+        kept, removed = remove_branches_entering_neighbor_soma(rows, neighbor_soma_context, sample_step=0.5)
+        by_id = {int(n[0]): n for n in rows}
+        for nid in sorted(removed):
+            node = by_id[nid]; parent = int(node[6])
+            if parent not in removed:
+                neighbor_soma_audit['events'].append(dict(
+                    phase=phase, cut_node_id=nid, parent_id=parent,
+                    child_xyz=list(node[2:5]),
+                    parent_xyz=list(by_id[parent][2:5]) if parent in by_id else None))
+        neighbor_soma_audit['removed_ids'] = sorted(set(neighbor_soma_audit['removed_ids']) | removed)
+        _record_removed_ids(removed, "分支进入周围其他 neuron 的胞体区域",
+                            "remove_branches_entering_neighbor_soma")
+        return kept
 
-    def remove_sharp_bends(swc_list, min_order=2, angle_thresh=90.0):
-        G_swc = nx.DiGraph()
-        for node in swc_list:
-            nid, ntype, x, y, z, r, pid = node
-            G_swc.add_node(nid, type=ntype, coords=np.array([x, y, z]), r=r, pid=pid)
-            if pid != -1: G_swc.add_edge(pid, nid)
-
-        swc_roots = [n for n, d in G_swc.in_degree() if d == 0]
-        nodes_to_remove = set()
-        z_cut_annotations = []
-        
-        def dfs_prune(curr, current_order):
-            if curr in nodes_to_remove: return
-            
-            children = list(G_swc.successors(curr))
-            
-            # 遇到分叉 (子节点>1)，则下一级的 order + 1
-            next_order = current_order + 1 if len(children) > 1 else current_order
-            
-            # 只在 "Branch 内部" 检查 (1个父节点，1个子节点)
-            preds = list(G_swc.predecessors(curr))
-            if len(preds) == 1 and len(children) == 1 and current_order >= min_order:
-                p = preds[0]
-                c = children[0]
-                cp, cn, cc = G_swc.nodes[p]['coords'], G_swc.nodes[curr]['coords'], G_swc.nodes[c]['coords']
-                
-                v1 = cn - cp  # 流入方向
-                v2 = cc - cn  # 流出方向
-                n1, n2 = np.linalg.norm(v1), np.linalg.norm(v2)
-                
-                if n1 > 1e-5 and n2 > 1e-5:
-                    dot = np.dot(v1/n1, v2/n2)
-                    angle = np.degrees(np.arccos(np.clip(dot, -1.0, 1.0)))
-                    
-                    # 如果这根连贯的线上，突然自己跟自己打了个折返回来 (大于90度的锐角弯)
-                    # A one-voxel discretization bend must not remove a measured
-                    # branch. Evaluate a physical window through the turn.
-                    window=[cp,cn,cc];cur=c;length=0.
-                    while G_swc.out_degree(cur)==1 and length<8:
-                        nxt=next(iter(G_swc.successors(cur)));q=G_swc.nodes[nxt]['coords']
-                        length+=np.linalg.norm(q-window[-1]);window.append(q);cur=nxt
-                    if angle > angle_thresh and not signal_evidence.supported_xyz(window):
-                        # 从子节点开始，把后面的乱线全部斩断
-                        descendants = nx.descendants(G_swc, c)
-                        descendants.add(c)
-                        nodes_to_remove.update(descendants)
-                        
-                        dir_x, dir_y = (v1[0]/n1), (v1[1]/n1)
-                        z_cut_annotations.append({
-                            'rx': cn[0], 'ry': cn[1],
-                            'text': f"Z-CUT\n{angle:.0f}°",
-                            'color': '#ff00ff', # 用洋红色特别标注死结
-                            'text_x': cn[0] + dir_x * 40,
-                            'text_y': cn[1] + dir_y * 40
-                        })
-                        return # 剪断了，不用再遍历下面了
-            
-            for child in children:
-                if child not in nodes_to_remove:
-                    dfs_prune(child, next_order)
-
-        for r in swc_roots: dfs_prune(r, 1)
-            
-        pruned_tree = [node for node in swc_list if node[0] not in nodes_to_remove]
-        return pruned_tree, z_cut_annotations
-
-    # 执行剪枝：从 Order 2 起，只要转角大于 90 度，全部切掉
-    tree_final_pruned, z_cut_anns = remove_sharp_bends(tree_final, min_order=2, angle_thresh=90.0)
-    _record_removed_ids(
-        {int(node[0]) for node in tree_final}
-        - {int(node[0]) for node in tree_final_pruned},
-        "二级及以上分支出现大于90度的局部急转",
-        "remove_sharp_bends",
-    )
-    
-    def remove_crosstalk(swc_list, min_order=2):
-        G_swc = nx.DiGraph()
-        for node in swc_list:
-            nid, ntype, x, y, z, r, pid = node
-            G_swc.add_node(nid, type=ntype, coords=np.array([x, y, z]), r=r, pid=pid)
-            if pid != -1: G_swc.add_edge(pid, nid)
-
-        swc_roots = [n for n, d in G_swc.in_degree() if d == 0]
-        nodes_to_remove = set()
-        crosstalk_annotations = []
-
-        def dfs_crosstalk(curr, current_order, branch_start_coord, path_length):
-            if curr in nodes_to_remove: return
-
-            curr_coord = G_swc.nodes[curr]['coords']
-
-            children = list(G_swc.successors(curr))
-            is_bifurcation = len(children) > 1
-
-            # 提取两个判定串线的核心指标
-            euc_dist = np.linalg.norm(curr_coord - branch_start_coord) # 直线距离
-            tortuosity = (path_length / euc_dist) if euc_dist > 1e-3 else 1.0 # 曲折度
-
-            is_crosstalk = False
-            reason = ""
-
-            # 只有长到远端且路径极度曲折时才判定串线；不再根据远端增粗剪枝。
-            if current_order >= min_order and euc_dist > 15.0:
-                # 极度扭曲的跨界飞线：实际路径是直线距离的 2.5 倍以上。
-                if tortuosity > 2.5 and not signal_evidence.supported_xyz([G_swc.nodes[n]['coords'] for n in nx.shortest_path(G_swc, next(iter(swc_roots)), curr)]):
-                    is_crosstalk = True
-                    reason = f"Wiggly\n(T:{tortuosity:.1f})"
-
-            if is_crosstalk:
-                descendants = nx.descendants(G_swc, curr)
-                descendants.add(curr)
-                nodes_to_remove.update(descendants)
-
-                crosstalk_annotations.append({
-                    'rx': curr_coord[0], 'ry': curr_coord[1],
-                    'text': f"CROSSTALK\n{reason}",
-                    'color': '#ffaa00', # 用橙色标注串线
-                    'text_x': curr_coord[0] + 30,
-                    'text_y': curr_coord[1] + 30
-                })
-                return # 发现串线，直接砍断整条分支
-
-            # 继续顺着树枝往下爬
-            for child in children:
-                if child not in nodes_to_remove:
-                    c_coord = G_swc.nodes[child]['coords']
-                    step_len = np.linalg.norm(c_coord - curr_coord)
-
-                    # 如果遇到分叉路口，下一级分支重新开始记录新的起点坐标
-                    if is_bifurcation:
-                        dfs_crosstalk(child, current_order + 1, curr_coord, step_len)
-                    else:
-                        # 如果没有分叉，继续累加这条路的长度
-                        dfs_crosstalk(child, current_order, branch_start_coord, path_length + step_len)
-
-        for r in swc_roots:
-            dfs_crosstalk(r, 1, G_swc.nodes[r]['coords'], 0.0)
-
-        pruned_tree = [node for node in swc_list if node[0] not in nodes_to_remove]
-        return pruned_tree, crosstalk_annotations
-
-    # 1. 执行跨界串线剪枝
-    tree_final_pruned_2, crosstalk_anns = remove_crosstalk(tree_final_pruned, min_order=2)
-    _record_removed_ids(
-        {int(node[0]) for node in tree_final_pruned}
-        - {int(node[0]) for node in tree_final_pruned_2},
-        "远端分支曲折度大于2.5",
-        "remove_crosstalk",
-    )
-    
-    # 2. 把 Z-Bend 和 Cross-talk 的标注合并在一起，统一扔给 Step 8 显示
-    combined_anns = z_cut_anns + crosstalk_anns
-    _visualize_step("step08_sharp_bends", tree_data=tree_final_pruned_2, scale=2, annotations=combined_anns)
-    
-    # 3. 更新最终输出树
-    tree_final, weak_removed, weak_reports = prune_unsupported(tree_final_pruned_2, signal_evidence, sxyz, protected_mask=confirmed_mask)
-    _record_removed_ids(weak_removed, "连续三维路径缺少横截面信号支持", "sustained_3d_signal_gap")
-    tree_final, crossing_removed, crossing_reports = prune_crossing_switches(tree_final, signal_evidence, sxyz, protected_mask=confirmed_mask)
-    _record_removed_ids(crossing_removed, "急转接入两侧连续的另一条三维分支", "switch_to_transverse_shaft")
-    tree_final, sheet_removed, sheet_reports = prune_sheet_supported(tree_final, signal_evidence, sxyz, protected_mask=globals().get('SHEET_PROTECTED_SOMA_MASK', confirmed_mask))
-    _record_removed_ids(sheet_removed, "连续三维路径沿宽片状亮信号延伸，缺少横向局限", "sustained_sheet_like_signal")
-    # Check repaired-region terminals and witnessed foreign-soma connectors.
-    from algorithms.tracing.repair_evidence import prune_with_context
-    tree_final, repair_removed, repair_audit = prune_with_context(
-        tree_final, signal_evidence, globals().get('REPAIR_EVIDENCE_CONTEXT'))
-    _record_removed_ids(repair_removed,
-        "相邻胞体附近的补全路径缺少持续双侧管状信号支持", "repair_without_bilateral_tube")
-    # Retired for skeleton + segmented soma: do not delete soma-adjacent
-    # terminals based on soma-relative length, tube support or duplication.
-    soma_terminal_audit = dict(rule='soma_adjacent_dead_end',
-                               status='disabled', removed_ids=[], decisions=[])
-    # Last topology-changing operation: evaluate terminal paths on the final tree.
-    tree_final, short_leaf_audit = prune_final_short_leaves(tree_final)
-    print(f"Final short-terminal pruning (<7.75 um): "
-          f"{len(short_leaf_audit['before_nodes'])} -> {len(tree_final)} nodes; "
-          f"removed {short_leaf_audit['removed_length_um']:.3f} um", flush=True)
-    _record_removed_ids(short_leaf_audit["removed_ids"],
-                        "最终末梢三维路径长度小于 7.75 µm", "final_short_terminal")
+    write_swc(tree_final, os.path.join(diagnostic_dir, 'before_neighbor_soma_cuts.swc'))
+    tree_final = cut_neighbor_somas(tree_final, 'before_geometry_cleanup')
+    # Only redundant-point merging and Zigzag correction remain in geometry QC.
+    tree_final = apply_qc_geometry_steps(tree_final, removal_callback=_record_removed_ids)
+    # Rewiring can create a new edge across a foreign soma; check those edges too.
+    tree_final = cut_neighbor_somas(tree_final, 'after_geometry_cleanup')
+    write_swc(tree_final, os.path.join(diagnostic_dir, 'after_neighbor_soma_cuts.swc'))
+    from algorithms.tracing.connection_diagnostics import save_json
+    save_json(os.path.join(diagnostic_dir, 'neighbor_soma_cuts.json'), neighbor_soma_audit)
+    _visualize_step("step08_geometry_cleanup", tree_data=tree_final, scale=2)
+    # Retain empty legacy audit fields for existing report consumers.
+    weak_reports, crossing_reports, sheet_reports = [], [], []
+    repair_audit = dict(rule='repair_without_bilateral_tube', status='disabled',
+                        removed_ids=[], decisions=[])
+    soma_terminal_audit = dict(rule='soma_adjacent_dead_end', status='disabled',
+                              removed_ids=[], decisions=[])
+    # No second length pass: the user-requested 7.75 um filter runs first only.
     _complete_pruning_reason_coverage(tree_final)
     # ==========================================================
 
@@ -2106,6 +1655,9 @@ def process_neuron_morphology(input_imgfile, swc_neu, raw_imgfile, out_swc_dir, 
         _visualize_step("step09_final_result", tree_data=tree_final, scale=1)
     if True:
         reason_report = {
+            "pruning_policy": POLICY,
+            "active_rules": ["initial_short_terminal", "local_connection_gap", "remove_branches_entering_neighbor_soma",
+                             "soma_cleanup", "qc_merge_close_point", "qc_remove_zigzag"],
             "cell_id": cell_id,
             "input_swc": swc_neu,
             "output_swc": out_swc,
@@ -2114,7 +1666,10 @@ def process_neuron_morphology(input_imgfile, swc_neu, raw_imgfile, out_swc_dir, 
             "sheet_signal_decisions": sheet_reports,
             "repair_evidence_audit": repair_audit,
             "soma_terminal_audit": soma_terminal_audit,
-            "final_short_leaf_audit": short_leaf_audit,
+            "initial_short_leaf_audit": short_leaf_audit,
+            "connection_audit": connection_audit,
+            "neighbor_soma_audit": neighbor_soma_audit,
+            "final_short_leaf_audit": None,
             "removed_nodes": {
                 str(node_id): info
                 for node_id, info in sorted(pruning_reasons.items())

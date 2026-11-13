@@ -2,6 +2,8 @@
 /* Uses only job-scoped artifacts; never follows paths embedded in a reason report. */
 const PruningReasons=(()=>{
 const labels={
+ initial_short_terminal:'初始末梢三维路径长度小于 7.75 µm',
+ local_connection_gap:'局部三方向投影及三维原图确认连接断口',
  final_short_terminal:'最终末梢三维路径长度小于 7.75 µm',
  soma_adjacent_dead_end:'胞体外短末端缺少独立管状信号，或重复贴合保留分支',
  qc_merge_close_point:'删除距离过近的冗余节点',qc_remove_zigzag:'连续两次急转形成 Zigzag',
